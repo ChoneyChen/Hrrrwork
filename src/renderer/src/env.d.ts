@@ -1,8 +1,8 @@
-import type { SleepRelayApi } from '../../shared/types'
+import type { HrrrworkApi } from '../../shared/types'
 
 declare global {
   interface Window {
-    sleepRelay: SleepRelayApi
+    hrrrwork: HrrrworkApi
   }
 }
 

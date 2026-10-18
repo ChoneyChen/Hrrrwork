@@ -17,6 +17,7 @@ export async function setStartAtLogin(enabled: boolean): Promise<void> {
 
 async function setLinuxAutostart(enabled: boolean): Promise<void> {
   const directory = path.join(os.homedir(), '.config', 'autostart')
+  // Reuse the existing startup entry so upgrades never register it twice.
   const file = path.join(directory, 'sleep-relay.desktop')
   if (!enabled) {
     await fs.rm(file, { force: true })
@@ -28,7 +29,7 @@ async function setLinuxAutostart(enabled: boolean): Promise<void> {
   const entry = [
     '[Desktop Entry]',
     'Type=Application',
-    'Name=SleepRelay',
+    'Name=Hrrrwork',
     'Comment=Resume Codex work after usage limits reset',
     `Exec="${executable}" --hidden`,
     'Terminal=false',

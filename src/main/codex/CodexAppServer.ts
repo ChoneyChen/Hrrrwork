@@ -44,7 +44,7 @@ export class CodexAppServer extends EventEmitter {
     })
 
     await this.call('initialize', {
-      clientInfo: { name: 'sleep_relay', title: 'SleepRelay', version: '0.1.0' },
+      clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '0.1.1' },
       capabilities: { experimentalApi: true }
     })
     this.notify('initialized', {})

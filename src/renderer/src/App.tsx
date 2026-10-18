@@ -60,8 +60,8 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     if (isCapture) return
-    void window.sleepRelay.getSnapshot().then(setSnapshot)
-    return window.sleepRelay.onSnapshot(setSnapshot)
+    void window.hrrrwork.getSnapshot().then(setSnapshot)
+    return window.hrrrwork.onSnapshot(setSnapshot)
   }, [isCapture])
 
   const limits = useMemo(() => {
@@ -77,14 +77,14 @@ export function App(): React.JSX.Element {
   const refresh = async (): Promise<void> => {
     setBusy(true)
     try {
-      setSnapshot(await window.sleepRelay.refresh())
+      setSnapshot(await window.hrrrwork.refresh())
     } finally {
       setBusy(false)
     }
   }
 
   const updateSettings = async (patch: Partial<RelaySettings>): Promise<void> => {
-    setSnapshot(await window.sleepRelay.updateSettings(patch))
+    setSnapshot(await window.hrrrwork.updateSettings(patch))
   }
 
   const statusText = snapshot.settings.enabled ? '安心睡吧，我在巡夜' : '接力暂时休息中'
@@ -95,7 +95,7 @@ export function App(): React.JSX.Element {
         <div className="brand">
           <LogoMark />
           <div>
-            <strong>SleepRelay</strong>
+            <strong>Hrrrwork</strong>
             <span>睡眠接力</span>
           </div>
         </div>
@@ -177,7 +177,7 @@ export function App(): React.JSX.Element {
                 thread={thread}
                 latest={index === 0 && snapshot.settings.autoWatchRecent}
                 watched={snapshot.settings.watchedThreadIds.includes(thread.id)}
-                onToggle={async () => setSnapshot(await window.sleepRelay.toggleWatch(thread.id))}
+                onToggle={async () => setSnapshot(await window.hrrrwork.toggleWatch(thread.id))}
               />
             ))}
             {!snapshot.threads.length && (
@@ -204,7 +204,7 @@ export function App(): React.JSX.Element {
                   <button
                     className="play-button"
                     title="立即发送"
-                    onClick={async () => setSnapshot(await window.sleepRelay.sendNow(item.id))}
+                    onClick={async () => setSnapshot(await window.hrrrwork.sendNow(item.id))}
                   ><Play size={15} fill="currentColor" /></button>
                 </div>
               ))}
@@ -235,7 +235,7 @@ export function App(): React.JSX.Element {
           codexPath={snapshot.codexPath}
           onClose={() => setSettingsOpen(false)}
           onUpdate={updateSettings}
-          onRevealLogs={() => void window.sleepRelay.revealLogs()}
+          onRevealLogs={() => void window.hrrrwork.revealLogs()}
         />
       )}
     </main>

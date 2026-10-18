@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { RelaySettings, RelaySnapshot, SleepRelayApi } from '../shared/types'
+import type { RelaySettings, RelaySnapshot, HrrrworkApi } from '../shared/types'
 
-const api: SleepRelayApi = {
+const api: HrrrworkApi = {
   getSnapshot: () => ipcRenderer.invoke('relay:get-snapshot') as Promise<RelaySnapshot>,
   refresh: () => ipcRenderer.invoke('relay:refresh') as Promise<RelaySnapshot>,
   updateSettings: (patch: Partial<RelaySettings>) => ipcRenderer.invoke('relay:update-settings', patch) as Promise<RelaySnapshot>,
@@ -15,4 +15,4 @@ const api: SleepRelayApi = {
   }
 }
 
-contextBridge.exposeInMainWorld('sleepRelay', api)
+contextBridge.exposeInMainWorld('hrrrwork', api)

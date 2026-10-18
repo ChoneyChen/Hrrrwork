@@ -1,21 +1,23 @@
 <div align="center">
-  <img src="resources/icon.svg" width="116" alt="SleepRelay logo" />
-  <h1>SleepRelay · 睡眠接力</h1>
+  <img src="resources/icon.svg" width="116" alt="Hrrrwork logo" />
+  <h1>Hrrrwork · 睡眠接力</h1>
   <p><strong>你去睡，任务别停。</strong></p>
-  <p>当 Codex 因 5 小时 / 每周额度耗尽而中断，SleepRelay 会安静等到额度刷新，再把 <code>continue</code> 递回原任务。</p>
+  <p>当 Codex 因 5 小时 / 每周额度耗尽而中断，Hrrrwork 会安静等到额度刷新，再把 <code>continue</code> 递回原任务。</p>
 
   [![macOS](https://img.shields.io/badge/macOS-supported-26314f?logo=apple&logoColor=white)](#安装)
   [![Windows](https://img.shields.io/badge/Windows-supported-26314f?logo=windows&logoColor=white)](#安装)
   [![Linux](https://img.shields.io/badge/Linux-supported-26314f?logo=linux&logoColor=white)](#安装)
-  [![CI](https://github.com/ChoneyChen/SleepRelay/actions/workflows/check.yml/badge.svg)](https://github.com/ChoneyChen/SleepRelay/actions/workflows/check.yml)
+  [![CI](https://github.com/ChoneyChen/Hrrrwork/actions/workflows/check.yml/badge.svg)](https://github.com/ChoneyChen/Hrrrwork/actions/workflows/check.yml)
   [![License: MIT](https://img.shields.io/badge/license-MIT-ee886e.svg)](LICENSE)
+
+  [访问官网](https://choneychen.github.io/Hrrrwork/) · [下载 Hrrrwork](https://github.com/ChoneyChen/Hrrrwork/releases/latest)
 </div>
 
-![SleepRelay dashboard](docs/dashboard.png)
+![Hrrrwork dashboard](docs/dashboard.png)
 
 ## 它做什么
 
-SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方本地 App Server 协议，不抓屏、不模拟点击，也不碰浏览器 Cookie。
+Hrrrwork 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方本地 App Server 协议，不抓屏、不模拟点击，也不碰浏览器 Cookie。
 
 1. 定时读取 Codex 的 5 小时与每周额度窗口；
 2. 额度真正耗尽时，确认最近任务是否以 `interrupted` / `failed` 状态结束；
@@ -23,7 +25,7 @@ SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方�
 4. 发送前重新检查原任务——如果你已经手动继续，它会自动取消；
 5. 任务仍停在原中断轮次时，向同一线程发送 `continue`。
 
-> 官方协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)。SleepRelay 是社区工具，并非 OpenAI 官方产品。
+> 官方协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)。Hrrrwork 是社区工具，并非 OpenAI 官方产品。
 
 ## 设计上的小心思
 
@@ -38,7 +40,7 @@ SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方�
 
 ### 下载应用
 
-前往 [Releases](https://github.com/ChoneyChen/SleepRelay/releases) 下载对应系统的安装包：
+前往 [Hrrrwork 官网](https://choneychen.github.io/Hrrrwork/#download) 下载对应系统的安装包：
 
 | 系统 | 文件 |
 |---|---|
@@ -46,12 +48,11 @@ SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方�
 | Windows | 便携版 `.exe` |
 | Linux | `.AppImage` 或 `.deb` |
 
-> 当前首发包是未做商业证书签名的社区构建。macOS 首次打开时可在 Finder 中右键应用选择「打开」；Windows 若显示 SmartScreen，可先核对下载来源确为本仓库，再选择「仍要运行」。
 
 ### 前置条件
 
 - 已安装并登录 ChatGPT/Codex 桌面端，或已安装并登录 [Codex CLI](https://learn.chatgpt.com/docs/codex-cli)；
-- SleepRelay 通常会自动找到桌面端内置或系统中的 `codex`；找不到时可在「巡夜设置」中手动填写路径。
+- Hrrrwork 通常会自动找到桌面端内置或系统中的 `codex`；找不到时可在「巡夜设置」中手动填写路径。
 
 首次打开后，保持「自动接力」开启即可。想守护多个任务时，在「最近任务」右侧点亮星标。
 
@@ -59,7 +60,7 @@ SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方�
 
 ```mermaid
 flowchart LR
-    A[Codex App Server] -->|额度窗口 + 线程状态| B[SleepRelay 巡夜器]
+    A[Codex App Server] -->|额度窗口 + 线程状态| B[Hrrrwork 巡夜器]
     B --> C{额度耗尽且任务中断?}
     C -->|否| D[继续安静巡查]
     C -->|是| E[按 resetsAt 等待]
@@ -82,8 +83,8 @@ src/renderer/     React 可视化界面
 需要 Node.js 24+。
 
 ```bash
-git clone https://github.com/ChoneyChen/SleepRelay.git
-cd SleepRelay
+git clone https://github.com/ChoneyChen/Hrrrwork.git
+cd Hrrrwork
 npm install
 npm run dev
 ```
@@ -101,11 +102,11 @@ npm run package:linux  # Linux 安装包
 
 ## 安全与边界
 
-- SleepRelay 只通过本机 `codex app-server` 通信，沿用你已有的 Codex 登录；
+- Hrrrwork 只通过本机 `codex app-server` 通信，沿用你已有的 Codex 登录；
 - 不上传对话、配置或令牌到第三方服务器；
 - 事件日志仅记录“连接、发现中断、接力成功/失败”等摘要，不记录对话正文；
 - 自动发送仅限你开启守护的范围，且内容默认为 `continue`；
-- Codex 协议或桌面端存储行为未来若变化，SleepRelay 会显示连接错误，而不是降级为模拟鼠标键盘。
+- Codex 协议或桌面端存储行为未来若变化，Hrrrwork 会显示连接错误，而不是降级为模拟鼠标键盘。
 
 发现安全问题请不要公开贴出账号数据或线程内容，可通过仓库的 Security advisory 私下报告。
 

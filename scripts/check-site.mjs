@@ -1,0 +1,35 @@
+import { app, BrowserWindow } from 'electron'
+import { writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+app.on('window-all-closed', () => {})
+app.whenReady().then(async () => {
+  try {
+    for (const [label, width, height] of [['desktop', 1440, 1000], ['mobile', 390, 844]]) {
+      const window = new BrowserWindow({ width, height, show: false, webPreferences: { offscreen: true } })
+      await window.loadFile(path.join(root, 'docs/index.html'))
+      await window.webContents.executeJavaScript(`Promise.all([...document.images].map(img => { img.loading = 'eager'; return img.decode(); }))`)
+      const report = await window.webContents.executeJavaScript(`({
+        title: document.title,
+        viewport: innerWidth,
+        content: document.documentElement.scrollWidth,
+        images: [...document.images].map(img => ({src: img.getAttribute('src'), loaded: img.complete && img.naturalWidth > 0})),
+        brokenAnchors: [...document.querySelectorAll('a[href^="#"]')].filter(a => a.hash && !document.getElementById(a.hash.slice(1))).map(a => a.hash),
+        downloads: [...document.querySelectorAll('a[href*="/releases/download/"]')].map(a => a.href)
+      })`)
+      if (report.content > report.viewport || report.images.some(img => !img.loaded) || report.brokenAnchors.length) {
+        throw new Error(`${label}: ${JSON.stringify(report)}`)
+      }
+      await writeFile(path.join(os.tmpdir(), `hrrrwork-site-${label}.png`), (await window.webContents.capturePage()).toPNG())
+      console.log(JSON.stringify({ label, ...report }))
+      window.destroy()
+    }
+    app.quit()
+  } catch (error) {
+    console.error(error)
+    app.exit(1)
+  }
+})

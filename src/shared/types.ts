@@ -84,7 +84,7 @@ export interface RelaySnapshot {
   lastCheckedAt: number | null
 }
 
-export interface SleepRelayApi {
+export interface HrrrworkApi {
   getSnapshot: () => Promise<RelaySnapshot>
   refresh: () => Promise<RelaySnapshot>
   updateSettings: (patch: Partial<RelaySettings>) => Promise<RelaySnapshot>

@@ -41,7 +41,7 @@ export class JsonStore {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.warn('Could not read SleepRelay state:', error)
+        console.warn('Could not read Hrrrwork state:', error)
       }
     }
     return this.get()

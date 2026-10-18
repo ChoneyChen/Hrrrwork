@@ -235,7 +235,7 @@ export class RelayEngine extends EventEmitter {
       }
       this.state.queue.push(item)
       this.addEvent('warning', `发现额度中断，已接住「${shortName(item.threadName)}」。`, thread.id)
-      this.notifyUser('SleepRelay 接住任务了 🌙', '额度刷新后会自动发送 continue。')
+      this.notifyUser('Hrrrwork 接住任务了 🌙', '额度刷新后会自动发送 continue。')
     }
     await this.store.set(this.state)
   }
@@ -279,7 +279,7 @@ export class RelayEngine extends EventEmitter {
       })
       this.removeQueueItem(item.id)
       this.addEvent('success', `接力成功：已向「${shortName(item.threadName)}」发送 ${this.state.settings.continuePrompt}。`, item.threadId)
-      this.notifyUser('SleepRelay 已完成接力 ✨', `「${shortName(item.threadName)}」已继续工作。`)
+      this.notifyUser('Hrrrwork 已完成接力 ✨', `「${shortName(item.threadName)}」已继续工作。`)
       await this.store.set(this.state)
     } catch (error) {
       item.status = 'waiting'

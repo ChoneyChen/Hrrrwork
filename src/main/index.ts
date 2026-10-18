@@ -7,6 +7,8 @@ import { RelayEngine } from './relay/RelayEngine'
 import { JsonStore } from './store'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
+// Keep existing settings and queued relays when upgrading from the original name.
+app.setPath('userData', path.join(app.getPath('appData'), 'sleep-relay'))
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let engine: RelayEngine | null = null
@@ -45,7 +47,7 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
-  // SleepRelay lives in the tray on every desktop platform.
+  // Hrrrwork lives in the tray on every desktop platform.
 })
 
 function createWindow(): void {
@@ -55,7 +57,7 @@ function createWindow(): void {
     minWidth: 920,
     minHeight: 640,
     show: false,
-    title: 'SleepRelay',
+    title: 'Hrrrwork',
     backgroundColor: '#f6f1e8',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     autoHideMenuBar: true,
@@ -95,10 +97,10 @@ function createTray(): void {
     : path.resolve('resources/icon.png')
   const image = nativeImage.createFromPath(iconPath).resize({ width: 20, height: 20 })
   tray = new Tray(image)
-  tray.setToolTip('SleepRelay · 睡眠接力')
+  tray.setToolTip('Hrrrwork · 睡眠接力')
   tray.on('click', () => showWindow())
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开 SleepRelay', click: () => showWindow() },
+    { label: '打开 Hrrrwork', click: () => showWindow() },
     { label: '立即检查', click: () => void engine?.refresh() },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
@@ -109,7 +111,7 @@ function updateTray(snapshot: RelaySnapshot): void {
   if (!tray) return
   const waiting = snapshot.queue.length
   const state = snapshot.settings.enabled ? '巡夜中' : '已暂停'
-  tray.setToolTip(`SleepRelay · ${state}${waiting ? ` · ${waiting} 个待接力` : ''}`)
+  tray.setToolTip(`Hrrrwork · ${state}${waiting ? ` · ${waiting} 个待接力` : ''}`)
 }
 
 function registerIpc(): void {
