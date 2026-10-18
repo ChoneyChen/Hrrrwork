@@ -30,8 +30,6 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run ${{ matrix.command }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v7
         with:
           name: SleepRelay-${{ runner.os }}
