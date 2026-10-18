@@ -43,8 +43,10 @@ SleepRelay 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方�
 | 系统 | 文件 |
 |---|---|
 | macOS | `.dmg` 或 `.zip` |
-| Windows | 安装版或便携版 `.exe` |
+| Windows | 便携版 `.exe` |
 | Linux | `.AppImage` 或 `.deb` |
+
+> 当前首发包是未做商业证书签名的社区构建。macOS 首次打开时可在 Finder 中右键应用选择「打开」；Windows 若显示 SmartScreen，可先核对下载来源确为本仓库，再选择「仍要运行」。
 
 ### 前置条件
 
