@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import readline from 'node:readline'
+import { cliLaunch } from '../providers/cliLaunch'
 
 interface RpcResponse<T> {
   id?: number
@@ -29,10 +30,11 @@ export class CodexAppServer extends EventEmitter {
   async start(): Promise<void> {
     if (this.child) return
     this.stopping = false
-    this.child = spawn(this.executable, ['app-server', '--listen', 'stdio://'], {
+    const invocation = await cliLaunch(this.executable, 'codex')
+    this.child = spawn(invocation.executable, [...invocation.prefix, 'app-server', '--listen', 'stdio://'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
-      env: process.env
+      env: invocation.env
     })
 
     const lines = readline.createInterface({ input: this.child.stdout })
@@ -44,7 +46,7 @@ export class CodexAppServer extends EventEmitter {
     })
 
     await this.call('initialize', {
-      clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '0.1.1' },
+      clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '1.0.0' },
       capabilities: { experimentalApi: true }
     })
     this.notify('initialized', {})

@@ -2,7 +2,7 @@
   <img src="resources/icon.svg" width="116" alt="Hrrrwork logo" />
   <h1>Hrrrwork · 睡眠接力</h1>
   <p><strong>你去睡，任务别停。</strong></p>
-  <p>当 Codex 因 5 小时 / 每周额度耗尽而中断，Hrrrwork 会安静等到额度刷新，再把 <code>continue</code> 递回原任务。</p>
+  <p>当 Codex / Claude Code 因 5 小时或每周额度中断，Hrrrwork 等到刷新，再把 <code>continue</code> 递回原任务。</p>
 
   [![macOS](https://img.shields.io/badge/macOS-supported-26314f?logo=apple&logoColor=white)](#安装)
   [![Windows](https://img.shields.io/badge/Windows-supported-26314f?logo=windows&logoColor=white)](#安装)
@@ -17,15 +17,20 @@
 
 ## 它做什么
 
-Hrrrwork 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方本地 App Server 协议，不抓屏、不模拟点击，也不碰浏览器 Cookie。
+Hrrrwork 为 Codex 和 Claude Code 值夜班。自动检测本机应用，按应用显示额度、连接状态与任务；窗口固定贴合边框，内容只在列表内部滚动。
 
-1. 定时读取 Codex 的 5 小时与每周额度窗口；
+1. 同步各应用的 5 小时与每周额度窗口；
 2. 额度真正耗尽时，确认最近任务是否以 `interrupted` / `failed` 状态结束；
 3. 精确等待官方返回的 `resetsAt`，再留出一小段缓冲；
 4. 发送前重新检查原任务——如果你已经手动继续，它会自动取消；
 5. 任务仍停在原中断轮次时，向同一线程发送 `continue`。
 
-协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)。
+| 应用 | 额度与中断识别 | 接力方式 |
+|---|---|---|
+| Codex | 本地 App Server 读取额度与中断轮次 | 向原线程发送消息 |
+| Claude Code | 官方状态栏 `rate_limits` + `StopFailure: rate_limit` | CLI 按原 session ID 继续 |
+
+协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)、[Claude Code 状态栏](https://code.claude.com/docs/en/statusline)、[Hooks](https://code.claude.com/docs/en/hooks)、[继续会话](https://code.claude.com/docs/en/headless#continue-conversations)。
 
 ## 设计上的小心思
 
@@ -51,16 +56,43 @@ Hrrrwork 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方本�
 
 ### 前置条件
 
-- 已安装并登录 ChatGPT/Codex 桌面端，或已安装并登录 [Codex CLI](https://learn.chatgpt.com/docs/codex-cli)；
-- Hrrrwork 通常会自动找到桌面端内置或系统中的 `codex`；找不到时可在「巡夜设置」中手动填写路径。
+- 安装并登录你使用的 Codex 或 Claude Code；Claude Code 需使用支持 `rate_limits` 状态栏和 `StopFailure` hook 的新版。
+- Hrrrwork 自动发现桌面端内置 / PATH / 常见安装目录中的可执行文件，也可在设置中填写路径。
 
 首次打开后，保持「自动接力」开启即可。想守护多个任务时，在「最近任务」右侧点亮星标。
+
+### 连接 Claude Code
+
+切换到 Claude Code，点击「连接 Claude Code」。下一轮会话开始后，状态栏和事件桥接会同步额度与中断状态。连接时会备份设置，保留原状态栏及已有 hooks；点击「断开」会移除本工具的桥接并恢复原状态栏。
+
+只有明确的额度错误与已知刷新时间会安排接力，缺少额度信息时显示等待。手动继续会使旧接力失效。接力使用本机 CLI 和原会话 ID，沿用 Claude 的权限设置；需要批准时请打开原会话处理。
+
+### 命令行下载
+
+macOS：
+
+```bash
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-mac-universal.dmg' -o Hrrrwork.dmg
+```
+
+Windows PowerShell：
+
+```powershell
+Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-win-x64.exe' -OutFile Hrrrwork.exe
+```
+
+Linux：
+
+```bash
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage
+chmod +x Hrrrwork.AppImage
+```
 
 ## 工作原理
 
 ```mermaid
 flowchart LR
-    A[Codex App Server] -->|额度窗口 + 线程状态| B[Hrrrwork 巡夜器]
+    A[Codex / Claude Code] -->|额度窗口 + 会话状态| B[Hrrrwork 巡夜器]
     B --> C{额度耗尽且任务中断?}
     C -->|否| D[继续安静巡查]
     C -->|是| E[按 resetsAt 等待]
@@ -73,6 +105,7 @@ flowchart LR
 
 ```text
 src/main/codex/   官方 App Server 连接与跨平台路径发现
+src/main/providers/ Claude Code、应用发现与跨平台启动
 src/main/relay/   额度判断、任务筛选、队列与防重复逻辑
 src/main/         Electron 生命周期、托盘、开机启动与本地存储
 src/renderer/     React 可视化界面
@@ -102,11 +135,11 @@ npm run package:linux  # Linux 安装包
 
 ## 安全与边界
 
-- Hrrrwork 只通过本机 `codex app-server` 通信，沿用你已有的 Codex 登录；
+- Hrrrwork 通过本地协议或状态栏 / 事件桥接同步，沿用编码助手的已有登录；
 - 不上传对话、配置或令牌到第三方服务器；
 - 事件日志仅记录“连接、发现中断、接力成功/失败”等摘要，不记录对话正文；
 - 自动发送仅限你开启守护的范围，且内容默认为 `continue`；
-- Codex 协议或桌面端存储行为未来若变化，Hrrrwork 会显示连接错误，而不是降级为模拟鼠标键盘。
+- 额度数据缺失、权限待批准或接口变化时，界面会显示等待或需要检查。
 
 发现安全问题请不要公开贴出账号数据或线程内容，可通过仓库的 Security advisory 私下报告。
 
@@ -116,6 +149,9 @@ npm run package:linux  # Linux 安装包
 - [x] 原线程精确续跑与重复发送保护
 - [x] macOS / Windows / Linux
 - [x] 托盘、通知、开机启动、任务星标
+- [x] Claude Code 检测、额度同步与原会话接力
+- [x] 固定窗口布局与列表内滚动
+- [x] 三平台命令行下载
 - [ ] 更多语言
 - [ ] 可选的接力统计卡片
 

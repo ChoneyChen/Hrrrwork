@@ -12,6 +12,15 @@ app.whenReady().then(async () => {
       const window = new BrowserWindow({ width, height, show: false, webPreferences: { offscreen: true } })
       await window.loadFile(path.join(root, 'docs/index.html'))
       await window.webContents.executeJavaScript(`Promise.all([...document.images].map(img => { img.loading = 'eager'; return img.decode(); }))`)
+      const commands = await window.webContents.executeJavaScript(`(() => {
+        const selected = [];
+        for (const tab of document.querySelectorAll('[data-os]')) {
+          tab.click();
+          selected.push({ os: tab.dataset.os, command: document.getElementById('download-command').textContent, selected: tab.getAttribute('aria-selected') });
+        }
+        return selected;
+      })()`)
+      if (commands.length !== 3 || commands.some(item => item.selected !== 'true' || !item.command.includes('v1.0.0'))) throw new Error('Download commands did not switch correctly')
       const report = await window.webContents.executeJavaScript(`({
         title: document.title,
         viewport: innerWidth,
@@ -24,6 +33,9 @@ app.whenReady().then(async () => {
         throw new Error(`${label}: ${JSON.stringify(report)}`)
       }
       await writeFile(path.join(os.tmpdir(), `hrrrwork-site-${label}.png`), (await window.webContents.capturePage()).toPNG())
+      await window.webContents.executeJavaScript(`document.getElementById('command-line').scrollIntoView({ block: 'center', behavior: 'instant' })`)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      await writeFile(path.join(os.tmpdir(), `hrrrwork-command-${label}.png`), (await window.webContents.capturePage()).toPNG())
       console.log(JSON.stringify({ label, ...report }))
       window.destroy()
     }

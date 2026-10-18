@@ -5,6 +5,7 @@ import type { RelaySettings, RelaySnapshot } from '../shared/types'
 import { setStartAtLogin } from './autostart'
 import { RelayEngine } from './relay/RelayEngine'
 import { JsonStore } from './store'
+import { ClaudeCode } from './providers/ClaudeCode'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 // Keep existing settings and queued relays when upgrading from the original name.
@@ -21,12 +22,14 @@ app.on('second-instance', () => showWindow())
 
 app.whenReady().then(async () => {
   const store = new JsonStore(path.join(app.getPath('userData'), 'relay-state.json'))
+  const bridgeScript = app.isPackaged ? path.join(process.resourcesPath, 'claude-bridge.cjs') : path.resolve('resources/claude-bridge.cjs')
   engine = new RelayEngine(
     store,
     setStartAtLogin,
     (title, body) => {
       if (Notification.isSupported()) new Notification({ title, body }).show()
-    }
+    },
+    new ClaudeCode(bridgeScript)
   )
 
   createWindow()
@@ -52,20 +55,22 @@ app.on('window-all-closed', () => {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1120,
-    height: 760,
-    minWidth: 920,
-    minHeight: 640,
+    width: 1180,
+    height: 800,
+    minWidth: 960,
+    minHeight: 680,
     show: false,
     title: 'Hrrrwork',
     backgroundColor: '#f6f1e8',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    trafficLightPosition: { x: 18, y: 17 },
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(currentDirectory, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      scrollBounce: false
     }
   })
 
@@ -117,6 +122,8 @@ function updateTray(snapshot: RelaySnapshot): void {
 function registerIpc(): void {
   ipcMain.handle('relay:get-snapshot', () => engine?.snapshot())
   ipcMain.handle('relay:refresh', () => engine?.refresh())
+  ipcMain.handle('relay:connect-claude', () => engine?.connectClaude())
+  ipcMain.handle('relay:disconnect-claude', () => engine?.disconnectClaude())
   ipcMain.handle('relay:update-settings', (_event, patch: Partial<RelaySettings>) => engine?.updateSettings(patch))
   ipcMain.handle('relay:toggle-watch', (_event, threadId: string) => engine?.toggleWatch(threadId))
   ipcMain.handle('relay:send-now', (_event, queueId: string) => engine?.sendNow(queueId))

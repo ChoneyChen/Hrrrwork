@@ -1,4 +1,16 @@
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error'
+export type ProviderId = 'codex' | 'claude-code'
+
+export interface ProviderSnapshot {
+  id: ProviderId
+  name: string
+  installed: boolean
+  connected: boolean
+  message: string
+  executable: string
+  quota: RateLimitResponse | null
+  lastCheckedAt: number | null
+}
 
 export interface QuotaWindow {
   usedPercent: number
@@ -23,6 +35,7 @@ export interface RateLimitResponse {
 }
 
 export interface ThreadSummary {
+  provider?: ProviderId
   id: string
   name?: string | null
   preview?: string | null
@@ -43,6 +56,7 @@ export interface ThreadTurn {
 }
 
 export interface RelayQueueItem {
+  provider?: ProviderId
   id: string
   threadId: string
   threadName: string
@@ -70,9 +84,11 @@ export interface RelaySettings {
   startAtLogin: boolean
   watchedThreadIds: string[]
   codexPath: string
+  claudePath: string
 }
 
 export interface RelaySnapshot {
+  providers: ProviderSnapshot[]
   connection: ConnectionState
   connectionMessage: string
   codexPath: string
@@ -91,5 +107,7 @@ export interface HrrrworkApi {
   toggleWatch: (threadId: string) => Promise<RelaySnapshot>
   sendNow: (queueId: string) => Promise<RelaySnapshot>
   revealLogs: () => Promise<void>
+  connectClaude: () => Promise<RelaySnapshot>
+  disconnectClaude: () => Promise<RelaySnapshot>
   onSnapshot: (listener: (snapshot: RelaySnapshot) => void) => () => void
 }

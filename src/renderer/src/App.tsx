@@ -14,9 +14,14 @@ import {
   WifiOff
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { QuotaWindow, RelaySettings, RelaySnapshot, ThreadSummary } from '../../shared/types'
+import type { ProviderId, QuotaWindow, RelaySettings, RelaySnapshot, ThreadSummary } from '../../shared/types'
+import { Moon } from './Moon'
 
 const demoSnapshot: RelaySnapshot = {
+  providers: [
+    { id: 'codex', name: 'Codex', installed: true, connected: true, message: '已连接', executable: '/usr/local/bin/codex', quota: { rateLimits: { limitId: 'codex', primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 4320 }, secondary: { usedPercent: 5, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 432000 } } }, lastCheckedAt: Date.now() },
+    { id: 'claude-code', name: 'Claude Code', installed: true, connected: true, message: '已连接 · 本地桥接', executable: '/usr/local/bin/claude', quota: { rateLimits: { limitId: 'claude-code', primary: { usedPercent: 64, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 4320 }, secondary: { usedPercent: 22, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 432000 } } }, lastCheckedAt: Date.now() }
+  ],
   connection: 'connected',
   connectionMessage: 'Codex 已连接',
   codexPath: '/usr/local/bin/codex',
@@ -47,7 +52,8 @@ const demoSnapshot: RelaySnapshot = {
     pollIntervalSeconds: 45,
     startAtLogin: false,
     watchedThreadIds: ['demo-2'],
-    codexPath: ''
+    codexPath: '',
+    claudePath: ''
   },
   lastCheckedAt: Date.now()
 }
@@ -57,6 +63,10 @@ export function App(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<RelaySnapshot | null>(isCapture ? demoSnapshot : null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>(new URLSearchParams(location.search).has('claude') ? 'claude-code' : 'codex')
+  const [errorMessage, setErrorMessage] = useState('')
+  const provider = snapshot?.providers.find(item => item.id === selectedProvider)
+  const providerThreads = snapshot?.threads.filter(thread => (thread.provider ?? 'codex') === selectedProvider) ?? []
 
   useEffect(() => {
     if (isCapture) return
@@ -65,12 +75,13 @@ export function App(): React.JSX.Element {
   }, [isCapture])
 
   const limits = useMemo(() => {
-    if (!snapshot?.quota) return null
-    return snapshot.quota.rateLimitsByLimitId?.codex
-      ?? snapshot.quota.rateLimits
-      ?? Object.values(snapshot.quota.rateLimitsByLimitId ?? {})[0]
+    const quota = provider?.quota
+    if (!quota) return null
+    return quota.rateLimitsByLimitId?.codex
+      ?? quota.rateLimits
+      ?? Object.values(quota.rateLimitsByLimitId ?? {})[0]
       ?? null
-  }, [snapshot])
+  }, [provider])
 
   if (!snapshot) return <LoadingScreen />
 
@@ -78,19 +89,31 @@ export function App(): React.JSX.Element {
     setBusy(true)
     try {
       setSnapshot(await window.hrrrwork.refresh())
+      setErrorMessage('')
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
     }
   }
 
   const updateSettings = async (patch: Partial<RelaySettings>): Promise<void> => {
-    setSnapshot(await window.hrrrwork.updateSettings(patch))
+    try { setSnapshot(await window.hrrrwork.updateSettings(patch)); setErrorMessage('') }
+    catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)) }
+  }
+
+  const connectClaude = async (): Promise<void> => {
+    setBusy(true)
+    try { setSnapshot(await window.hrrrwork.connectClaude()); setErrorMessage('') }
+    catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)) }
+    finally { setBusy(false) }
   }
 
   const statusText = snapshot.settings.enabled ? '安心睡吧，我在巡夜' : '接力暂时休息中'
 
   return (
     <main className="app-shell">
+      <div className="window-titlebar"><span>Hrrrwork</span></div>
       <header className="topbar">
         <div className="brand">
           <LogoMark />
@@ -100,9 +123,9 @@ export function App(): React.JSX.Element {
           </div>
         </div>
         <div className="top-actions">
-          <span className={`connection ${snapshot.connection}`}>
+          <span className={`connection ${provider?.connected ? 'connected' : 'disconnected'}`}>
             <i />
-            {snapshot.connection === 'connected' ? 'Codex 已连接' : snapshot.connectionMessage}
+            {snapshot.providers.filter(item => item.connected).length} 个应用已连接
           </span>
           <button className="icon-button" aria-label="立即检查" onClick={() => void refresh()} disabled={busy}>
             <RefreshCw size={18} className={busy ? 'spin' : ''} />
@@ -113,19 +136,26 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
+      <div className="provider-toolbar">
+        <div className="provider-tabs" aria-label="选择要守护的应用">
+          {snapshot.providers.map(item => <button key={item.id} className={`provider-tab ${selectedProvider === item.id ? 'selected' : ''}`} onClick={() => setSelectedProvider(item.id)} aria-pressed={selectedProvider === item.id}>
+            <span className={`provider-symbol ${item.id}`}>{item.id === 'codex' ? '〉_' : '✳'}</span>
+            <strong>{item.name}</strong><span className={`provider-state ${item.connected ? 'ready' : ''}`}>{item.connected ? '守护中' : item.installed ? '待连接' : '未检测到'}</span>
+          </button>)}
+        </div>
+        <span className="provider-status">{provider?.message}</span>
+        {selectedProvider === 'claude-code' && !provider?.connected && <button className="connect-provider" disabled={busy || !provider?.installed} onClick={() => void connectClaude()}>连接 Claude Code</button>}
+        {selectedProvider === 'claude-code' && provider?.connected && <button className="disconnect-provider" onClick={async () => { try { setSnapshot(await window.hrrrwork.disconnectClaude()) } catch (error) { setErrorMessage(String(error)) } }}>断开</button>}
+      </div>
+      {errorMessage && <button className="error-toast" onClick={() => setErrorMessage('')}>{errorMessage} ×</button>}
+
       <section className="dashboard-grid">
         <article className={`hero-card ${snapshot.settings.enabled ? '' : 'paused'}`}>
           <div className="night-illustration" aria-hidden="true">
             <span className="star star-one">✦</span>
             <span className="star star-two">·</span>
             <span className="star star-three">✧</span>
-            <div className="moon-face">
-              <i className="eye left" />
-              <i className="eye right" />
-              <i className="smile" />
-              <span className="blush left" />
-              <span className="blush right" />
-            </div>
+            <Moon className="hero-moon" />
             <div className="relay-line"><i /><i /><i /></div>
           </div>
           <div className="hero-copy">
@@ -133,7 +163,7 @@ export function App(): React.JSX.Element {
             <h1>{statusText}</h1>
             <p>
               {snapshot.settings.enabled
-                ? '任务因 5 小时或周额度中断时，我会等到刷新，再稳稳递上 continue。'
+                ? `${provider?.name ?? '应用'} 因额度中断时，我会等到刷新，再稳稳递上 continue。`
                 : '开启守护后，我会继续观察额度与任务状态。'}
             </p>
             <div className="hero-footer">
@@ -171,7 +201,7 @@ export function App(): React.JSX.Element {
             }
           />
           <div className="task-list">
-            {snapshot.threads.slice(0, 6).map((thread, index) => (
+            {providerThreads.map((thread, index) => (
               <TaskRow
                 key={thread.id}
                 thread={thread}
@@ -180,8 +210,8 @@ export function App(): React.JSX.Element {
                 onToggle={async () => setSnapshot(await window.hrrrwork.toggleWatch(thread.id))}
               />
             ))}
-            {!snapshot.threads.length && (
-              <div className="empty-state"><WifiOff size={20} />还没有读取到 Codex 任务</div>
+            {!providerThreads.length && (
+              <div className="empty-state"><WifiOff size={20} />{provider?.connected ? '等待下一轮会话同步' : `等待连接 ${provider?.name ?? '应用'}`}{selectedProvider === 'claude-code' && <small>连接后会同步额度，识别限额中断并接力原会话。</small>}</div>
             )}
           </div>
         </article>
@@ -199,7 +229,7 @@ export function App(): React.JSX.Element {
                   <div className="queue-dot"><Clock3 size={16} /></div>
                   <div>
                     <strong>{item.threadName}</strong>
-                    <span>{reasonLabel(item.reason)} · {formatDate(item.scheduledFor)} 接力</span>
+                    <span>{item.provider === 'claude-code' ? 'Claude Code' : 'Codex'} · {formatDate(item.scheduledFor)} 接力</span>
                   </div>
                   <button
                     className="play-button"
@@ -213,7 +243,7 @@ export function App(): React.JSX.Element {
             <div className="basket-empty">
               <div className="basket-icon"><Check size={24} /></div>
               <strong>没有等待中的接力</strong>
-              <span>额度充足，任务都在自己的轨道上。</span>
+              <span>{limits ? '任务都在自己的轨道上。' : '等待应用同步额度与会话。'}</span>
             </div>
           )}
           <div className="activity">
@@ -233,6 +263,7 @@ export function App(): React.JSX.Element {
         <SettingsDrawer
           settings={snapshot.settings}
           codexPath={snapshot.codexPath}
+          claudePath={snapshot.providers.find(item => item.id === 'claude-code')?.executable ?? ''}
           onClose={() => setSettingsOpen(false)}
           onUpdate={updateSettings}
           onRevealLogs={() => void window.hrrrwork.revealLogs()}
@@ -247,7 +278,7 @@ function LoadingScreen(): React.JSX.Element {
 }
 
 function LogoMark(): React.JSX.Element {
-  return <div className="logo-mark"><MoonStar size={23} strokeWidth={2.2} /></div>
+  return <div className="logo-mark"><Moon /></div>
 }
 
 function QuotaCard({ title, window, accent }: { title: string; window?: QuotaWindow | null; accent: 'coral' | 'blue' }): React.JSX.Element {
@@ -260,7 +291,7 @@ function QuotaCard({ title, window, accent }: { title: string; window?: QuotaWin
       </div>
       <div className="meter"><i style={{ width: `${percent}%` }} /></div>
       <div className="quota-footer">
-        <span>{percent >= 100 ? '等待刷新' : '仍可安心工作'}</span>
+        <span>{!window ? '尚未同步' : percent >= 100 ? '等待刷新' : '仍可安心工作'}</span>
         <time>{window ? `${formatDate(window.resetsAt * 1000)} 刷新` : '等待额度信息'}</time>
       </div>
     </article>
@@ -284,7 +315,7 @@ function TaskRow({ thread, latest, watched, onToggle }: { thread: ThreadSummary;
       <div className="task-status"><i /></div>
       <div className="task-copy">
         <strong>{title}</strong>
-        <span>{thread.cwd ? compactPath(thread.cwd) : thread.source === 'cli' ? 'Codex CLI' : 'Codex 桌面端'} · {relativeTime(thread.updatedAt * 1000)}</span>
+        <span>{thread.provider === 'claude-code' ? 'Claude Code · ' : ''}{thread.cwd ? compactPath(thread.cwd) : thread.source === 'cli' ? 'Codex CLI' : 'Codex 桌面端'} · {relativeTime(thread.updatedAt * 1000)}</span>
       </div>
       {latest && <span className="latest-pill">自动</span>}
       <button className={`watch-button ${watched ? 'active' : ''}`} onClick={onToggle} title={watched ? '取消固定守护' : '固定守护'}>
@@ -294,15 +325,17 @@ function TaskRow({ thread, latest, watched, onToggle }: { thread: ThreadSummary;
   )
 }
 
-function SettingsDrawer({ settings, codexPath, onClose, onUpdate, onRevealLogs }: {
+function SettingsDrawer({ settings, codexPath, claudePath, onClose, onUpdate, onRevealLogs }: {
   settings: RelaySettings
   codexPath: string
+  claudePath: string
   onClose: () => void
   onUpdate: (patch: Partial<RelaySettings>) => Promise<void>
   onRevealLogs: () => void
 }): React.JSX.Element {
   const [draftPrompt, setDraftPrompt] = useState(settings.continuePrompt)
   const [draftPath, setDraftPath] = useState(settings.codexPath)
+  const [draftClaudePath, setDraftClaudePath] = useState(settings.claudePath)
   return (
     <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="settings-drawer">
@@ -340,6 +373,11 @@ function SettingsDrawer({ settings, codexPath, onClose, onUpdate, onRevealLogs }
           <small>已自动发现：{codexPath}</small>
         </label>
         <button className="log-button" onClick={onRevealLogs}><BellRing size={16} />打开数据与日志目录</button>
+        <label className="field">
+          <span>Claude Code 可执行文件</span>
+          <div className="input-with-action"><input value={draftClaudePath} onChange={event => setDraftClaudePath(event.target.value)} placeholder={claudePath || '自动检测'} /><button onClick={() => void onUpdate({ claudePath: draftClaudePath })}>应用</button></div>
+          <small>连接后同步状态栏与额度中断事件，保留已有状态栏。更新或移动应用后请重新连接。</small>
+        </label>
         <div className="privacy-note"><ShieldCheck size={17} /><span>本地运行；不读取对话正文，不保存账号令牌。</span></div>
       </aside>
     </div>
@@ -362,8 +400,4 @@ function relativeTime(value: number | null): string {
 function compactPath(value: string): string {
   const parts = value.replaceAll('\\', '/').split('/').filter(Boolean)
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : value
-}
-
-function reasonLabel(reason: 'five-hour' | 'weekly' | 'usage-limit'): string {
-  return reason === 'five-hour' ? '5 小时额度' : reason === 'weekly' ? '周额度' : '用量限制'
 }

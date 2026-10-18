@@ -4,6 +4,8 @@ import type { RelaySettings, RelaySnapshot, HrrrworkApi } from '../shared/types'
 const api: HrrrworkApi = {
   getSnapshot: () => ipcRenderer.invoke('relay:get-snapshot') as Promise<RelaySnapshot>,
   refresh: () => ipcRenderer.invoke('relay:refresh') as Promise<RelaySnapshot>,
+  connectClaude: () => ipcRenderer.invoke('relay:connect-claude') as Promise<RelaySnapshot>,
+  disconnectClaude: () => ipcRenderer.invoke('relay:disconnect-claude') as Promise<RelaySnapshot>,
   updateSettings: (patch: Partial<RelaySettings>) => ipcRenderer.invoke('relay:update-settings', patch) as Promise<RelaySnapshot>,
   toggleWatch: (threadId: string) => ipcRenderer.invoke('relay:toggle-watch', threadId) as Promise<RelaySnapshot>,
   sendNow: (queueId: string) => ipcRenderer.invoke('relay:send-now', queueId) as Promise<RelaySnapshot>,

@@ -1,7 +1,7 @@
 {
   "name": "hrrrwork",
-  "version": "0.1.1",
-  "description": "A tiny cross-platform night watch that resumes Codex work after usage limits reset.",
+  "version": "1.0.0",
+  "description": "A quiet desktop relay for Codex and Claude Code after usage limits reset.",
   "main": "out/main/index.js",
   "author": {
     "name": "Choney",
@@ -54,6 +54,10 @@
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "resources/claude-bridge.cjs",
+        "to": "claude-bridge.cjs"
+      },
       {
         "from": "resources/icon.png",
         "to": "icon.png"
