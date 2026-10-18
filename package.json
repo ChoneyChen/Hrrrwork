@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "description": "A tiny cross-platform night watch that resumes Codex work after usage limits reset.",
   "main": "out/main/index.js",
-  "author": "ChoneyChen",
+  "author": {
+    "name": "Choney",
+    "email": "choney1110@gmail.com"
+  },
+  "desktopName": "SleepRelay",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -66,6 +70,7 @@
     "linux": {
       "category": "Utility",
       "icon": "resources/icon.png",
+      "syncDesktopName": true,
       "target": [
         "AppImage",
         "deb"
