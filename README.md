@@ -25,7 +25,7 @@ Hrrrwork 是一个很小的跨平台桌面巡夜员。它使用 Codex 官方本�
 4. 发送前重新检查原任务——如果你已经手动继续，它会自动取消；
 5. 任务仍停在原中断轮次时，向同一线程发送 `continue`。
 
-> 官方协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)。Hrrrwork 是社区工具，并非 OpenAI 官方产品。
+协议参考：[Codex App Server](https://developers.openai.com/codex/app-server)。
 
 ## 设计上的小心思
 
