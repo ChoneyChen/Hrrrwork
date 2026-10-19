@@ -1,7 +1,7 @@
 import { Check, ChevronRight, Clock3, Download, MoonStar, RefreshCw, Settings2, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type RelaySettings, type RelaySnapshot, type UpdateState } from '../../shared/types'
-import { dailyWakeSlots, localDateTime } from '../../shared/wakeSchedule'
+import { dailyWakeSlots, earliestWakeMinute, localDateTime } from '../../shared/wakeSchedule'
 import { previewSnapshot } from './demo'
 import { Moon } from './Moon'
 import { QuotaCard } from './QuotaCard'
@@ -60,7 +60,7 @@ function WakeView({ snapshot, id, onUpdate }: { snapshot: RelaySnapshot; id: Pro
   const provider = snapshot.providers.find(item => item.id === id)!, settings = snapshot.settings.quotaWake[id]
   const limits = provider.quota?.rateLimitsByLimitId?.[id] ?? provider.quota?.rateLimits ?? Object.values(provider.quota?.rateLimitsByLimitId ?? {})[0]
   const resetAt = limits?.primary?.windowDurationMins === 300 ? limits.primary.resetsAt * 1000 : 0
-  const minimum = Math.ceil(Math.max(Date.now(), resetAt) / 60000) * 60000
+  const minimum = earliestWakeMinute(Date.now(), resetAt)
   const [daily, setDaily] = useState(settings.timing === 'daily')
   const [first, setFirst] = useState(localDateTime(settings.firstWakeAt || minimum))
   const [customModel, setCustomModel] = useState('')

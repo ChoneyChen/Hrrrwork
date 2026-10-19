@@ -1,5 +1,9 @@
 const FIVE_HOURS = 5 * 60 * 60 * 1000
 
+export function earliestWakeMinute(now: number, resetAt: number): number {
+  return Math.ceil(Math.max(now, resetAt) / 60000) * 60000
+}
+
 export function dailyWakeSlots(firstAt: number, from: number, count = 4): number[] {
   if (!Number.isFinite(firstAt) || firstAt <= 0 || !Number.isFinite(from)) return []
   const first = new Date(firstAt)

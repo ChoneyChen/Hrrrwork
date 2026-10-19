@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { dailyWakeSlots } from './wakeSchedule'
+import { dailyWakeSlots, earliestWakeMinute } from './wakeSchedule'
 
 describe('daily four-slot schedule', () => {
+  it('allows the exact reset minute even during the preceding minute', () => {
+    const reset = new Date(2026, 9, 20, 6, 30).getTime()
+    expect(earliestWakeMinute(reset - 10000, reset)).toBe(reset)
+    expect(earliestWakeMinute(reset, reset)).toBe(reset)
+    expect(earliestWakeMinute(reset + 1000, reset)).toBe(reset + 60000)
+  })
   const first = new Date(2026, 9, 20, 6, 0).getTime()
   it('follows 06 → 11 → 16 → 21 → next-day 06', () => {
     const slots = dailyWakeSlots(first, first, 5)
