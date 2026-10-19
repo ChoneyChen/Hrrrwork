@@ -1,6 +1,6 @@
 {
   "name": "hrrrwork",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Quiet desktop relay and optional quota wake for Codex and Claude Code.",
   "main": "out/main/index.js",
   "author": {

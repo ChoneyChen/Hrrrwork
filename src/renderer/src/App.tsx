@@ -10,7 +10,7 @@ type UpdateAction = 'check' | 'download' | 'install' | 'reveal'
 export function App(): React.JSX.Element {
   const capture = new URLSearchParams(location.search).has('capture')
   const [snapshot, setSnapshot] = useState<RelaySnapshot | null>(capture ? previewSnapshot(new URLSearchParams(location.search).has('daily')) : null)
-  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '2.0.1', message: '启动后检查更新' })
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '2.0.2', message: '启动后检查更新' })
   const [page, setPage] = useState(new URLSearchParams(location.search).has('wake') ? 'wake' : 'watch')
   const [providerId, setProvider] = useState<ProviderId>('codex')
   const [settingsOpen, setSettingsOpen] = useState(false)

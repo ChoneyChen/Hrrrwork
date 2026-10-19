@@ -144,8 +144,7 @@ function registerIpc(): void {
     if (!app.isPackaged || !updates || !installer || updates.snapshot().status !== 'ready') throw new Error('尚无可安装的更新。')
     const state = engine?.snapshot()
     if (state?.queue.some(item => item.status === 'sending') || state?.threads.some(thread => thread.status?.type === 'active') || Object.values(state?.wakePlans ?? {}).some(plan => ['dispatching', 'submitted'].includes(plan.status))) throw new Error('正在执行任务，请本轮结束后再安装。')
-    const command = await installer.prepare(await updates.installerPath(), updates.snapshot().latestVersion!)
-    await installer.launch(command)
+    await installer.install(await updates.installerPath(), updates.snapshot().latestVersion!)
     isQuitting = true
     await engine?.stop()
     app.quit()

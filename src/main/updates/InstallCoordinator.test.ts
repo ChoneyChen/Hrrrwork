@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -20,6 +20,18 @@ async function fixture() {
   return { root, directory, target, file, options, coordinator: new InstallCoordinator(options) }
 }
 describe('verified install handoff', () => {
+  it('does not launch two installers after a repeated click and allows retry on a failed handoff', async () => {
+    const f = await fixture()
+    const launch = vi.spyOn(f.coordinator, 'launch').mockRejectedValueOnce(new Error('launch failed')).mockResolvedValue()
+    const prepare = vi.spyOn(f.coordinator, 'prepare')
+    const first = f.coordinator.install(f.file, '2.1.0')
+    await expect(f.coordinator.install(f.file, '2.1.0')).rejects.toThrow('安装已开始')
+    await expect(first).rejects.toThrow('launch failed')
+    await f.coordinator.install(f.file, '2.1.0')
+    await expect(f.coordinator.install(f.file, '2.1.0')).rejects.toThrow('安装已开始')
+    expect(launch).toHaveBeenCalledTimes(2)
+    expect(prepare).toHaveBeenCalledTimes(2)
+  })
   it('keeps packages until the expected version starts from the expected location', async () => {
     const f = await fixture()
     await f.coordinator.prepare(f.file, '2.1.0')

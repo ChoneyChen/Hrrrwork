@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { createReadStream, promises as fs } from 'node:fs'
+import { constants, createReadStream, promises as fs } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 
@@ -30,13 +30,23 @@ async function digest(file: string): Promise<string> {
 }
 
 export class InstallCoordinator {
+  private installing = false
   private cleaning: Promise<'none' | 'pending' | 'failed' | 'cleaned'> | null = null
   private get receiptFile(): string { return path.join(this.options.directory, 'pending-install.json') }
   constructor(private readonly options: InstallOptions) {}
 
+  async install(installer: string, version: string): Promise<void> {
+    if (this.installing) throw new Error('安装已开始，请勿重复操作。')
+    this.installing = true
+    try { await this.launch(await this.prepare(installer, version)) }
+    catch (error) { this.installing = false; throw error }
+  }
+
   async prepare(installer: string, version: string): Promise<{ executable: string; args: string[] }> {
     if (!safeVersion(version) || path.dirname(installer) !== path.resolve(this.options.directory) || !/^Hrrrwork-[\d.]+-(?:mac-(?:universal|arm64|x64)\.dmg|win-x64\.exe|linux-(?:amd64\.deb|x86_64\.AppImage))$/.test(path.basename(installer))) throw new Error('安装包不属于受管理的更新缓存。')
     const { kind, target } = installTarget(this.options)
+    if (kind === 'deb' && this.options.platform === process.platform) await fs.access('/usr/bin/pkexec', constants.X_OK).catch(() => { throw new Error('系统缺少 pkexec，请从更新目录手动安装 DEB。') })
+    if (kind === 'appimage') await fs.access(path.dirname(target), constants.W_OK).catch(() => { throw new Error('AppImage 所在目录不可写，请移至用户目录后更新。') })
     const extension = kind === 'windows' ? '.exe' : kind === 'mac' ? '.dmg' : kind === 'deb' ? '.deb' : '.AppImage'
     if (!installer.endsWith(extension)) throw new Error('安装包与当前应用安装方式不匹配。')
     const id = randomUUID(), helper = path.join(this.options.directory, `install-${id}${kind === 'windows' ? '.ps1' : '.sh'}`)
