@@ -20,6 +20,12 @@ New Codex wake conversations use a dedicated local directory and a read-only san
 
 From v1.2, automatic release checking and installer downloads are enabled by default, with separate switches in settings. Requests only contact this project's public GitHub release endpoints and asset CDN; no coding-client credentials or conversation content are included. Only stable versions and exact platform/architecture asset names are accepted. Every installer must match the release asset's SHA-256 digest and size before becoming available, and is rechecked before reveal. A digest confirms integrity against GitHub release metadata, not independent publisher identity or operating-system signing.
 
-Installers are saved in the application's per-user `updates` cache, never executed automatically. Incomplete downloads are removed on handled failure. Installation is explicitly performed by the user, after exiting the running application. Existing configuration and relay receipts remain in the same application-data directory.
+Installers are saved in the application's per-user `updates` cache and never executed just because a download completes. In v2, clicking **Close and install** explicitly authorizes a verified installer handoff after the application exits. macOS replaces only the selected Hrrrwork app bundle, Windows uses the per-user NSIS installer, Linux DEB uses the system privilege prompt, and AppImage replaces its own executable. Active work blocks this handoff. No credentials are stored or privilege prompts suppressed.
+
+The new application deletes a cached installer only after the helper reports success and the expected version starts from the expected location. The cache path, receipt and digest are rechecked before deletion. Canceled or failed installations retain their packages for retry; unrelated downloads and application data are not removed. Incomplete downloads are removed on handled failure. Configuration and relay receipts keep the existing application-data location.
+
+## Optional daily wake
+
+The daily mode is optional and keeps wake independent from interrupted-task relay. Its first timestamp must be at or after the known official next five-hour reset. Four daily slots are generated from that anchor, five hours apart, returning to the first anchor on the next day in the device's local time zone. Delayed official resets and weekly restrictions postpone dispatch; missing quota data does not create guessed allowance. At-most-once receipts, busy-work avoidance and the stale-plan cutoff remain in force.
 
 On Linux, detection can inspect same-user Codex processes to locate the bundled CLI and inherit only `CODEX_HOME` / `CODEX_SQLITE_HOME`. It does not copy, persist, or display arbitrary process environment variables.
