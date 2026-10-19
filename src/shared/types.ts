@@ -1,6 +1,18 @@
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error'
 export type ProviderId = 'codex' | 'claude-code'
 
+export interface UpdateSettings { autoCheck: boolean; autoDownload: boolean }
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'current' | 'available' | 'downloading' | 'ready' | 'error' | 'unsupported'
+  currentVersion: string
+  latestVersion?: string
+  message: string
+  checkedAt?: number
+  progress?: number
+  downloadedBytes?: number
+  totalBytes?: number
+}
+
 export interface WakeModel {
   id: string
   name: string
@@ -41,6 +53,8 @@ export interface ProviderSnapshot {
   quota: RateLimitResponse | null
   lastCheckedAt: number | null
   models?: WakeModel[]
+  discoverySource?: string
+  dataDirectory?: string
 }
 
 export interface QuotaWindow {
@@ -118,6 +132,7 @@ export interface RelaySettings {
   codexPath: string
   claudePath: string
   quotaWake: Record<ProviderId, QuotaWakeSettings>
+  updates: UpdateSettings
 }
 
 export interface RelaySnapshot {
@@ -135,6 +150,11 @@ export interface RelaySnapshot {
 }
 
 export interface HrrrworkApi {
+  getUpdateState: () => Promise<UpdateState>
+  checkForUpdates: () => Promise<UpdateState>
+  downloadUpdate: () => Promise<UpdateState>
+  revealUpdate: () => Promise<void>
+  onUpdateState: (listener: (state: UpdateState) => void) => () => void
   getSnapshot: () => Promise<RelaySnapshot>
   refresh: () => Promise<RelaySnapshot>
   updateSettings: (patch: Partial<RelaySettings>) => Promise<RelaySnapshot>

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, shell, Tray } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, net, Notification, shell, Tray } from 'electron'
+import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { RelaySettings, RelaySnapshot } from '../shared/types'
@@ -6,6 +7,7 @@ import { setStartAtLogin } from './autostart'
 import { RelayEngine } from './relay/RelayEngine'
 import { JsonStore } from './store'
 import { ClaudeCode } from './providers/ClaudeCode'
+import { UpdateManager } from './updates/UpdateManager'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 // Keep existing settings and queued relays when upgrading from the original name.
@@ -13,6 +15,7 @@ app.setPath('userData', path.join(app.getPath('appData'), 'sleep-relay'))
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let engine: RelayEngine | null = null
+let updates: UpdateManager | null = null
 let isQuitting = false
 
 const gotLock = app.requestSingleInstanceLock()
@@ -21,6 +24,13 @@ if (!gotLock) app.quit()
 app.on('second-instance', () => showWindow())
 
 app.whenReady().then(async () => {
+  updates = new UpdateManager({
+    version: app.getVersion(), directory: path.join(app.getPath('userData'), 'updates'),
+    platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE,
+    debian: existsSync('/etc/debian_version'), background: app.isPackaged,
+    fetch: (input, init) => net.fetch(input instanceof URL ? input.toString() : input, { ...init, bypassCustomProtocolHandlers: true })
+  })
+  updates.on('state', (state) => mainWindow?.webContents.send('updates:state', state))
   const store = new JsonStore(path.join(app.getPath('userData'), 'relay-state.json'))
   const bridgeScript = app.isPackaged ? path.join(process.resourcesPath, 'claude-bridge.cjs') : path.resolve('resources/claude-bridge.cjs')
   engine = new RelayEngine(
@@ -37,10 +47,12 @@ app.whenReady().then(async () => {
   createTray()
   registerIpc()
   engine.on('state', (snapshot: RelaySnapshot) => {
+    updates?.configure(snapshot.settings.updates)
     mainWindow?.webContents.send('relay:snapshot', snapshot)
     updateTray(snapshot)
   })
   await engine.start()
+  updates.configure(engine.snapshot().settings.updates)
 
   if (process.argv.includes('--hidden')) mainWindow?.hide()
 })
@@ -48,6 +60,7 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   isQuitting = true
   void engine?.stop()
+  updates?.stop()
 })
 
 app.on('window-all-closed', () => {
@@ -108,6 +121,7 @@ function createTray(): void {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 Hrrrwork', click: () => showWindow() },
     { label: '立即检查', click: () => void engine?.refresh() },
+    { label: '检查软件更新', click: () => { showWindow(); void updates?.check() } },
     { type: 'separator' },
     { label: '退出', click: () => app.quit() }
   ]))
@@ -121,6 +135,12 @@ function updateTray(snapshot: RelaySnapshot): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('updates:get', () => updates?.snapshot())
+  ipcMain.handle('updates:check', () => updates?.check())
+  ipcMain.handle('updates:download', () => updates?.download())
+  ipcMain.handle('updates:reveal', async () => {
+    if (updates) shell.showItemInFolder(await updates.installerPath())
+  })
   ipcMain.handle('relay:get-snapshot', () => engine?.snapshot())
   ipcMain.handle('relay:refresh', () => engine?.refresh())
   ipcMain.handle('relay:connect-claude', () => engine?.connectClaude())

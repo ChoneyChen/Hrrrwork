@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Download,
   History,
   MoonStar,
   Play,
@@ -14,7 +15,7 @@ import {
   WifiOff
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { DEFAULT_QUOTA_WAKE, WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type QuotaWindow, type RelaySettings, type RelaySnapshot, type ThreadSummary } from '../../shared/types'
+import { DEFAULT_QUOTA_WAKE, WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type QuotaWindow, type RelaySettings, type RelaySnapshot, type ThreadSummary, type UpdateState } from '../../shared/types'
 import { Moon } from './Moon'
 
 const demoSnapshot: RelaySnapshot = {
@@ -54,6 +55,7 @@ const demoSnapshot: RelaySnapshot = {
     watchedThreadIds: ['demo-2'],
     codexPath: '',
     claudePath: '',
+    updates: { autoCheck: true, autoDownload: true },
     quotaWake: { ...structuredClone(DEFAULT_QUOTA_WAKE), codex: { ...DEFAULT_QUOTA_WAKE.codex, enabled: true } }
   },
   wakePlans: { codex: { resetAt: Date.now() / 1000 + 4320, scheduledFor: Date.now() + 4380000, status: 'waiting', message: '等待官方五小时窗口刷新' } },
@@ -68,6 +70,7 @@ export function App(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>(new URLSearchParams(location.search).has('claude') ? 'claude-code' : 'codex')
   const [errorMessage, setErrorMessage] = useState('')
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '1.2.0', message: '启动后自动检查更新' })
   const provider = snapshot?.providers.find(item => item.id === selectedProvider)
   const providerThreads = snapshot?.threads.filter(thread => (thread.provider ?? 'codex') === selectedProvider) ?? []
 
@@ -75,6 +78,12 @@ export function App(): React.JSX.Element {
     if (isCapture) return
     void window.hrrrwork.getSnapshot().then(setSnapshot)
     return window.hrrrwork.onSnapshot(setSnapshot)
+  }, [isCapture])
+
+  useEffect(() => {
+    if (isCapture) return
+    void window.hrrrwork.getUpdateState().then(setUpdate)
+    return window.hrrrwork.onUpdateState(setUpdate)
   }, [isCapture])
 
   const limits = useMemo(() => {
@@ -129,6 +138,7 @@ export function App(): React.JSX.Element {
           </div>
         </div>
         <div className="top-actions">
+          {['available', 'downloading', 'ready'].includes(update.status) && <button className="update-badge" onClick={() => setSettingsOpen(true)}><Download size={13} />{update.status === 'ready' ? '更新已就绪' : update.status === 'downloading' ? `下载中 ${update.progress ?? 0}%` : '发现新版本'}</button>}
           <span className={`connection ${provider?.connected ? 'connected' : 'disconnected'}`}>
             <i />
             {snapshot.providers.filter(item => item.connected).length} 个应用已连接
@@ -270,6 +280,14 @@ export function App(): React.JSX.Element {
 
       {settingsOpen && (
         <SettingsDrawer
+          update={update}
+          onUpdateAction={async (action) => {
+            if (isCapture) { setUpdate(previous => ({ ...previous, status: 'current', message: '已是最新版本，安心巡夜。', checkedAt: Date.now() })); return }
+            try {
+              if (action === 'reveal') await window.hrrrwork.revealUpdate()
+              else setUpdate(await (action === 'check' ? window.hrrrwork.checkForUpdates() : window.hrrrwork.downloadUpdate()))
+            } catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)) }
+          }}
           settings={snapshot.settings}
           snapshot={snapshot}
           selectedProvider={selectedProvider}
@@ -336,7 +354,9 @@ function TaskRow({ thread, latest, watched, onToggle }: { thread: ThreadSummary;
   )
 }
 
-function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claudePath, onClose, onUpdate, onRevealLogs }: {
+function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claudePath, onClose, onUpdate, onRevealLogs, update, onUpdateAction }: {
+  update: UpdateState
+  onUpdateAction: (action: 'check' | 'download' | 'reveal') => Promise<void>
   settings: RelaySettings
   snapshot: RelaySnapshot
   selectedProvider: ProviderId
@@ -357,6 +377,18 @@ function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claud
           <div><strong>开机自动巡夜</strong><span>登录系统后静默驻留托盘</span></div>
           <input type="checkbox" checked={settings.startAtLogin} onChange={(event) => void onUpdate({ startAtLogin: event.target.checked })} />
         </label>
+        <section className="update-settings" aria-labelledby="update-title">
+          <div className="wake-heading"><span><Download size={17} /><strong id="update-title">软件更新</strong></span><span className="version-pill">v{update.currentVersion}</span></div>
+          <label className="setting-row"><div><strong>自动检查更新</strong><span>启动后与每 6 小时检查正式版本</span></div><input type="checkbox" checked={settings.updates.autoCheck} onChange={event => void onUpdate({ updates: { ...settings.updates, autoCheck: event.target.checked } })} /></label>
+          <label className="setting-row"><div><strong>自动下载安装包</strong><span>发现新版本后下载，完成后由你安装</span></div><input type="checkbox" checked={settings.updates.autoDownload} onChange={event => void onUpdate({ updates: { ...settings.updates, autoDownload: event.target.checked } })} /></label>
+          <p className="update-status" role="status">{update.message}</p>
+          {update.status === 'downloading' && <div className="update-progress"><progress aria-label="更新下载进度" max={100} value={update.progress ?? 0} /><span>{update.progress ?? 0}% · {Math.round((update.downloadedBytes ?? 0) / 1048576)} / {Math.round((update.totalBytes ?? 0) / 1048576)} MB</span></div>}
+          <div className="update-actions"><button disabled={['checking', 'downloading'].includes(update.status)} onClick={() => void onUpdateAction('check')}>{update.status === 'checking' ? '正在检查…' : '检查更新'}</button>
+            {update.latestVersion && ['available', 'error'].includes(update.status) && <button onClick={() => void onUpdateAction('download')}>下载 v{update.latestVersion}</button>}
+            {update.status === 'ready' && <button className="primary" onClick={() => void onUpdateAction('reveal')}>查看更新包</button>}
+          </div>
+          <small>仅从 Hrrrwork 官方 GitHub 发布下载，核验 SHA-256。不会静默覆盖正在运行的应用。安装前先从托盘退出；macOS 拖入应用程序，Windows 打开新版 EXE，Ubuntu 安装 DEB，AppImage 替换后设为可执行。</small>
+        </section>
         <WakeSettings snapshot={snapshot} initialProvider={selectedProvider} onUpdate={onUpdate} />
         <label className="field">
           <span>接力口令</span>
@@ -385,6 +417,8 @@ function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claud
             <button onClick={() => void onUpdate({ codexPath: draftPath })}>应用</button>
           </div>
           <small>已自动发现：{codexPath}</small>
+          <small>{snapshot.providers.find(item => item.id === 'codex')?.discoverySource}</small>
+          <small>数据目录：{snapshot.providers.find(item => item.id === 'codex')?.dataDirectory || '默认 Codex 目录'}</small>
         </label>
         <button className="log-button" onClick={onRevealLogs}><BellRing size={16} />打开数据与日志目录</button>
         <label className="field">

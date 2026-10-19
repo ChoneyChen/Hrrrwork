@@ -132,6 +132,17 @@ button { color: inherit; }
 .wake-chip { display: flex; align-items: center; gap: 7px; max-width: 100%; margin-top: 12px; padding: 6px 9px; border: 1px solid #ffffff20; border-radius: 9px; background: #ffffff08; color: #ffffff8c; cursor: pointer; font-size: 10px; }
 .wake-chip span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.wake-chip.enabled { color: #f5dba6; border-color: #f5dba630; }.wake-chip svg { flex-shrink: 0; }
 .wake-settings { padding: 18px; margin: 20px 0; border: 1px solid #e4d9c9; border-radius: 18px; background: #f7f1e6; }
+.update-settings { padding: 18px; margin: 20px 0; border: 1px solid #d4ded6; border-radius: 18px; background: #eef3ed; }
+.version-pill { font-size: 10px; color: #51634f; }
+.update-status { font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.update-settings small { display: block; color: var(--muted); font-size: 10px; line-height: 1.8; margin-top: 12px; }
+.update-progress progress { width: 100%; accent-color: #64765b; }
+.update-progress span { font-size: 10px; color: var(--muted); }
+.update-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.update-actions button, .update-badge { border: 1px solid #c8d4c5; border-radius: 10px; background: #fffdf8; padding: 8px 10px; font-size: 11px; cursor: pointer; color: #4c6049; }
+.update-actions button:disabled { opacity: .5; cursor: default; }
+.update-actions .primary { background: #52654d; color: white; }
+.update-badge { display: flex; align-items: center; gap: 5px; }
 .wake-heading, .wake-heading > span:first-child { display: flex; align-items: center; gap: 8px; }.wake-heading { justify-content: space-between; }.wake-heading strong { font-size: 15px; }.new-pill { font-size: 9px; letter-spacing: .12em; color: #b77359; background: #eddbcc; border-radius: 5px; padding: 3px 6px; }
 .wake-intro { color: #85808a; font-size: 11px; line-height: 1.8; }.wake-provider-tabs { display: flex; gap: 6px; margin: 16px 0 4px; }.wake-provider-tabs button { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: transparent; font-size: 11px; cursor: pointer; }.wake-provider-tabs button[aria-pressed="true"] { background: var(--navy); color: #fff; }
 .wake-settings .wake-enable { padding: 16px 0; }.wake-settings .field { margin: 16px 0; }.wake-settings select { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 10px; background: #fffdf9; color: var(--ink); font-size: 11px; }

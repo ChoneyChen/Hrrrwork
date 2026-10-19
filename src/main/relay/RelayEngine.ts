@@ -13,12 +13,11 @@ import { WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type WakeModel,
   ThreadTurn
 } from '../../shared/types'
 import { CodexAppServer } from '../codex/CodexAppServer'
-import { findCodexExecutable } from '../codex/findCodex'
+import { discoverCodex } from '../codex/findCodex'
 import { DEFAULT_SETTINGS, JsonStore, type PersistedState } from '../store'
 import { classifyLimit, getPrimaryLimits, sameUnfinishedTurn, shouldQueueTurn } from './logic'
 import { ClaudeCode } from '../providers/ClaudeCode'
 import { claudeTurn } from '../providers/claudeState'
-import { findExecutable } from '../providers/executable'
 import { lowestEffort, QuotaWake } from './QuotaWake'
 
 interface ThreadListResult {
@@ -42,6 +41,10 @@ export class RelayEngine extends EventEmitter {
   private connectionMessage = '尚未连接'
   private codexPath = ''
   private codexInstalled = false
+  private codexSource = ''
+  private codexHome = ''
+  private connecting: Promise<void> | null = null
+  private stopped = false
   private quota: RateLimitResponse | null = null
   private threads: ThreadSummary[] = []
   private lastCheckedAt: number | null = null
@@ -75,6 +78,7 @@ export class RelayEngine extends EventEmitter {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
     if (this.interval) clearInterval(this.interval)
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     await this.client?.stop()
@@ -86,7 +90,8 @@ export class RelayEngine extends EventEmitter {
       providers: [{
         id: 'codex', name: 'Codex', installed: this.codexInstalled,
         connected: this.connection === 'connected', message: this.connectionMessage,
-        executable: this.codexPath, quota: this.quota, lastCheckedAt: this.lastCheckedAt, models: this.models
+        executable: this.codexPath, quota: this.quota, lastCheckedAt: this.lastCheckedAt, models: this.models,
+        discoverySource: this.codexSource, dataDirectory: this.codexHome
       }, this.claude.snapshot()],
       connection: this.connection,
       connectionMessage: this.connectionMessage,
@@ -102,6 +107,7 @@ export class RelayEngine extends EventEmitter {
   }
 
   async refresh(): Promise<RelaySnapshot> {
+    if (this.connection !== 'connected') await this.reconnect()
     await this.tick(true)
     return this.snapshot()
   }
@@ -126,6 +132,10 @@ export class RelayEngine extends EventEmitter {
   async updateSettings(patch: Partial<RelaySettings>): Promise<RelaySnapshot> {
     const previousPath = this.state.settings.codexPath
     const safePatch: Partial<RelaySettings> = { ...patch }
+    if (patch.updates) safePatch.updates = {
+      autoCheck: patch.updates.autoCheck === true,
+      autoDownload: patch.updates.autoDownload === true
+    }
     if (safePatch.graceSeconds !== undefined) {
       safePatch.graceSeconds = Math.max(15, Math.min(600, Math.round(safePatch.graceSeconds)))
     }
@@ -175,21 +185,38 @@ export class RelayEngine extends EventEmitter {
     return this.snapshot()
   }
 
-  private async connect(): Promise<void> {
+  private connect(): Promise<void> {
+    if (this.connecting) return this.connecting
+    this.connecting = this.connectOnce().finally(() => { this.connecting = null })
+    return this.connecting
+  }
+
+  private async connectOnce(): Promise<void> {
+    if (this.stopped) return
     this.connection = 'connecting'
     this.connectionMessage = '正在连接 Codex…'
     this.emitState()
     try {
-      this.codexPath = await findCodexExecutable(this.state.settings.codexPath)
-      this.codexInstalled = Boolean(await findExecutable('codex', this.codexPath))
-      this.client = new CodexAppServer(this.codexPath)
-      this.client.on('disconnect', (error: Error) => {
+      const installation = await discoverCodex(this.state.settings.codexPath)
+      this.codexPath = installation.executable ?? ''
+      this.codexSource = installation.source
+      this.codexHome = installation.codeHome || process.env.CODEX_HOME || path.join(os.homedir(), '.codex')
+      this.codexInstalled = Boolean(installation.executable)
+      if (!installation.executable) throw new Error(installation.source)
+      const client = new CodexAppServer(installation.executable, {
+        ...(installation.codeHome ? { CODEX_HOME: installation.codeHome } : {}),
+        ...(installation.sqliteHome ? { CODEX_SQLITE_HOME: installation.sqliteHome } : {})
+      })
+      this.client = client
+      client.on('disconnect', (error: Error) => {
+        if (this.client !== client || this.stopped) return
         this.connection = 'error'
         this.connectionMessage = error.message
         this.emitState()
         this.scheduleReconnect()
       })
-      this.client.on('notification', (method: string, params: unknown) => {
+      client.on('notification', (method: string, params: unknown) => {
+        if (this.client !== client) return
         if (method === 'account/rateLimits/updated') {
           const update = params as RateLimitResponse
           if (update?.rateLimits) this.quota = { ...this.quota, ...update }
@@ -200,13 +227,15 @@ export class RelayEngine extends EventEmitter {
           if (result.threadId && this.wake.complete(this.state, 'codex', result.threadId, result.turn?.status === 'completed', result.turn?.id)) this.addEvent(result.turn?.status === 'completed' ? 'success' : 'warning', this.state.wakePlans.codex!.message)
         }
       })
-      await this.client.start()
+      await client.start()
       this.connection = 'connected'
       this.connectionMessage = 'Codex 已连接'
       await this.loadModels()
       this.addEvent('success', '已连接 Codex，开始巡夜。')
       await this.tick(true)
     } catch (error) {
+      await this.client?.stop()
+      this.client = null
       this.connection = 'error'
       this.connectionMessage = error instanceof Error ? error.message : String(error)
       this.addEvent('error', `连接失败：${this.connectionMessage}`)
@@ -216,13 +245,16 @@ export class RelayEngine extends EventEmitter {
   }
 
   private async reconnect(): Promise<void> {
+    if (this.stopped) return
+    if (this.connecting) return this.connecting
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
     await this.client?.stop()
     this.client = null
     await this.connect()
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer) return
+    if (this.reconnectTimer || this.stopped) return
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       void this.reconnect()
@@ -246,14 +278,16 @@ export class RelayEngine extends EventEmitter {
       let codexThreads = this.threads.filter(thread => thread.provider !== 'claude-code')
       if (this.client && this.connection === 'connected') {
         try {
-          const [quota, threadResult] = await Promise.all([
+          const [quota, threadResult] = await Promise.allSettled([
             this.client.call<RateLimitResponse>('account/rateLimits/read'),
             this.client.call<ThreadListResult>('thread/list', {
               limit: 30, sortKey: 'updated_at', sortDirection: 'desc', sourceKinds: ['vscode', 'cli', 'appServer']
             })
           ])
-          this.quota = quota
-          codexThreads = (threadResult.data ?? []).map(thread => ({ ...thread, provider: 'codex' }))
+          this.quota = quota.status === 'fulfilled' ? quota.value : null
+          if (threadResult.status === 'fulfilled') codexThreads = (threadResult.value.data ?? []).map(thread => ({ ...thread, provider: 'codex' }))
+          const failures = [quota.status === 'rejected' ? `额度读取失败：${String(quota.reason instanceof Error ? quota.reason.message : quota.reason).slice(0, 180)}` : '', threadResult.status === 'rejected' ? `任务读取失败：${String(threadResult.reason instanceof Error ? threadResult.reason.message : threadResult.reason).slice(0, 180)}` : ''].filter(Boolean)
+          this.connectionMessage = failures.length ? `Codex 已连接 · ${failures.join('；')}` : 'Codex 已连接'
         } catch (error) {
           this.connectionMessage = error instanceof Error ? error.message : String(error)
         }

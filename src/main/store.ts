@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: RelaySettings = {
   watchedThreadIds: [],
   codexPath: '',
   claudePath: '',
+  updates: { autoCheck: true, autoDownload: true },
   quotaWake: structuredClone(DEFAULT_QUOTA_WAKE)
 }
 
@@ -61,7 +62,7 @@ export class JsonStore {
         dispatched: Array.isArray(parsed.dispatched) ? parsed.dispatched.slice(-200) : [],
         wakePlans: restoreWakePlans(parsed.wakePlans),
         wakeReceipts: Array.isArray(parsed.wakeReceipts) ? parsed.wakeReceipts.slice(-200) : [],
-        settings: { ...DEFAULT_SETTINGS, ...parsed.settings, quotaWake: {
+        settings: { ...DEFAULT_SETTINGS, ...parsed.settings, updates: { ...DEFAULT_SETTINGS.updates, ...parsed.settings?.updates }, quotaWake: {
           codex: { ...DEFAULT_QUOTA_WAKE.codex, ...parsed.settings?.quotaWake?.codex },
           'claude-code': { ...DEFAULT_QUOTA_WAKE['claude-code'], ...parsed.settings?.quotaWake?.['claude-code'] }
         } },

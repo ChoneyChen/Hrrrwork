@@ -29,6 +29,32 @@ function fixture(resetOffset = 300, wakeDirectory?: string) {
 }
 
 describe('multi-provider relay safety', () => {
+  it('shows Codex tasks even when the quota endpoint fails and does not send without quota', async () => {
+    const { engine } = fixture()
+    engine['connection'] = 'connected'
+    engine['client'] = { call: vi.fn(async (method: string) => {
+      if (method === 'thread/list') return { data: [{ id: 'desktop-task', createdAt: 0, updatedAt: Date.now() / 1000 }] }
+      throw new Error('quota temporarily unavailable')
+    }) } as unknown as CodexAppServer
+    await engine['tick'](true)
+    expect(engine.snapshot().threads.some(thread => thread.id === 'desktop-task')).toBe(true)
+    expect(engine.snapshot().quota).toBeNull()
+    expect(engine.snapshot().connectionMessage).toContain('额度读取失败')
+    expect(engine.snapshot().queue.some(item => (item.provider ?? 'codex') === 'codex')).toBe(false)
+  })
+
+  it('keeps available quota visible when only task listing fails', async () => {
+    const { engine } = fixture()
+    const quota = { rateLimits: { limitId: 'codex', primary: { usedPercent: 30, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 1000 } } }
+    engine['connection'] = 'connected'
+    engine['client'] = { call: vi.fn(async (method: string) => {
+      if (method === 'account/rateLimits/read') return quota
+      throw new Error('thread temporarily unavailable')
+    }) } as unknown as CodexAppServer
+    await engine['tick'](true)
+    expect(engine.snapshot().quota).toEqual(quota)
+    expect(engine.snapshot().connectionMessage).toContain('任务读取失败')
+  })
   it('still queues Claude when the Codex thread reader fails', async () => {
     const { engine } = fixture()
     engine['client'] = { call: vi.fn().mockRejectedValue(new Error('Codex unavailable')) } as unknown as CodexAppServer

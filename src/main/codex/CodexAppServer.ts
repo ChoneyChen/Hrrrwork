@@ -23,14 +23,14 @@ export class CodexAppServer extends EventEmitter {
   private pending = new Map<number, PendingCall>()
   private stopping = false
 
-  constructor(private readonly executable: string) {
+  constructor(private readonly executable: string, private readonly environment: NodeJS.ProcessEnv = {}) {
     super()
   }
 
   async start(): Promise<void> {
     if (this.child) return
     this.stopping = false
-    const invocation = await cliLaunch(this.executable, 'codex')
+    const invocation = await cliLaunch(this.executable, 'codex', this.environment)
     this.child = spawn(invocation.executable, [...invocation.prefix, 'app-server', '--listen', 'stdio://'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
@@ -45,11 +45,16 @@ export class CodexAppServer extends EventEmitter {
       if (!this.stopping) this.handleExit(new Error(`Codex App Server exited (${code ?? 'unknown'})`))
     })
 
-    await this.call('initialize', {
-      clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '1.1.0' },
-      capabilities: { experimentalApi: true }
-    })
-    this.notify('initialized', {})
+    try {
+      await this.call('initialize', {
+        clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '1.2.0' },
+        capabilities: { experimentalApi: true }
+      })
+      this.notify('initialized', {})
+    } catch (error) {
+      await this.stop()
+      throw error
+    }
   }
 
   async stop(): Promise<void> {
