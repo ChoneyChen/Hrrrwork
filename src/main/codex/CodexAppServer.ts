@@ -47,7 +47,7 @@ export class CodexAppServer extends EventEmitter {
 
     try {
       await this.call('initialize', {
-        clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '2.0.0' },
+        clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '2.0.1' },
         capabilities: { experimentalApi: true }
       })
       this.notify('initialized', {})

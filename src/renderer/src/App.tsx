@@ -10,7 +10,7 @@ type UpdateAction = 'check' | 'download' | 'install' | 'reveal'
 export function App(): React.JSX.Element {
   const capture = new URLSearchParams(location.search).has('capture')
   const [snapshot, setSnapshot] = useState<RelaySnapshot | null>(capture ? previewSnapshot(new URLSearchParams(location.search).has('daily')) : null)
-  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '2.0.0', message: '启动后检查更新' })
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '2.0.1', message: '启动后检查更新' })
   const [page, setPage] = useState(new URLSearchParams(location.search).has('wake') ? 'wake' : 'watch')
   const [providerId, setProvider] = useState<ProviderId>('codex')
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -60,7 +60,7 @@ function WakeView({ snapshot, id, onUpdate }: { snapshot: RelaySnapshot; id: Pro
   const provider = snapshot.providers.find(item => item.id === id)!, settings = snapshot.settings.quotaWake[id]
   const limits = provider.quota?.rateLimitsByLimitId?.[id] ?? provider.quota?.rateLimits ?? Object.values(provider.quota?.rateLimitsByLimitId ?? {})[0]
   const resetAt = limits?.primary?.windowDurationMins === 300 ? limits.primary.resetsAt * 1000 : 0
-  const minimum = Math.ceil(Math.max(Date.now() + 60000, resetAt) / 60000) * 60000
+  const minimum = Math.ceil(Math.max(Date.now(), resetAt) / 60000) * 60000
   const [daily, setDaily] = useState(settings.timing === 'daily')
   const [first, setFirst] = useState(localDateTime(settings.firstWakeAt || minimum))
   const [customModel, setCustomModel] = useState('')

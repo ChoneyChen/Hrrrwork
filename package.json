@@ -1,6 +1,6 @@
 {
   "name": "hrrrwork",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Quiet desktop relay and optional quota wake for Codex and Claude Code.",
   "main": "out/main/index.js",
   "author": {
@@ -44,7 +44,10 @@
     "artifactName": "Hrrrwork-${version}-${os}-${arch}.${ext}",
     "asar": true,
     "compression": "maximum",
-    "electronLanguages": ["zh-CN", "en-US"],
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
     "npmRebuild": false,
     "directories": {
       "buildResources": "resources",
@@ -55,8 +58,14 @@
       "package.json"
     ],
     "extraResources": [
-      { "from": "resources/update-install.sh", "to": "update-install.sh" },
-      { "from": "resources/update-install.ps1", "to": "update-install.ps1" },
+      {
+        "from": "resources/update-install.sh",
+        "to": "update-install.sh"
+      },
+      {
+        "from": "resources/update-install.ps1",
+        "to": "update-install.ps1"
+      },
       {
         "from": "resources/claude-bridge.cjs",
         "to": "claude-bridge.cjs"
