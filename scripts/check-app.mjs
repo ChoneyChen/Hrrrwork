@@ -17,12 +17,16 @@ app.whenReady().then(async () => {
         const box = document.querySelector('.app-shell').getBoundingClientRect();
         const panels = [...document.querySelectorAll('.dashboard-grid > *')].map(node => { const r = node.getBoundingClientRect(); return { bottom: r.bottom, right: r.right }; });
         const clippedQuotas = [...document.querySelectorAll('.quota-card')].filter(card => card.querySelector('.quota-footer').getBoundingClientRect().bottom > card.getBoundingClientRect().bottom - 4).length;
+        const quota = [...document.querySelectorAll('.quota-card')].map(card => ({ label: card.querySelector('.quota-heading strong').textContent, remaining: Number(card.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')), width: card.querySelector('.meter i').style.width }));
         document.querySelectorAll('.provider-tab')[1].click();
-        return { viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY], documentSize: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], box: [box.width, box.height], panels, clippedQuotas };
+        return { viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY], documentSize: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], box: [box.width, box.height], panels, clippedQuotas, quota };
       })()`)
       if (report.clippedQuotas || report.scroll.some(v => v !== 0) || report.documentSize[0] > width || report.documentSize[1] > height || report.panels.some(p => p.bottom > height || p.right > width)) throw new Error(JSON.stringify(report))
+      if (JSON.stringify(report.quota.map(q => [q.label, q.remaining, q.width])) !== JSON.stringify([['剩余68%', 68, '68%'], ['剩余66%', 66, '66%']])) throw new Error('Quota display must show remaining allowance: ' + JSON.stringify(report.quota))
       console.log(JSON.stringify(report))
       await new Promise(resolve => setTimeout(resolve, 50))
+      const claudeQuota = await window.webContents.executeJavaScript(`[...document.querySelectorAll('.quota-card [role="progressbar"]')].map(node => Number(node.getAttribute('aria-valuenow')))`)
+      if (JSON.stringify(claudeQuota) !== JSON.stringify([36, 78])) throw new Error('Claude quota must also show remaining allowance')
       await writeFile(path.join(os.tmpdir(), `hrrrwork-app-${width}-${height}.png`), (await window.webContents.capturePage()).toPNG())
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="设置"]').click()`)
       await new Promise(resolve => setTimeout(resolve, 300))

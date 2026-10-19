@@ -15,12 +15,13 @@ import {
   WifiOff
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { DEFAULT_QUOTA_WAKE, WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type QuotaWindow, type RelaySettings, type RelaySnapshot, type ThreadSummary, type UpdateState } from '../../shared/types'
+import { DEFAULT_QUOTA_WAKE, WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type RelaySettings, type RelaySnapshot, type ThreadSummary, type UpdateState } from '../../shared/types'
 import { Moon } from './Moon'
+import { QuotaCard } from './QuotaCard'
 
 const demoSnapshot: RelaySnapshot = {
   providers: [
-    { id: 'codex', name: 'Codex', installed: true, connected: true, message: '已连接', executable: '/usr/local/bin/codex', quota: { rateLimits: { limitId: 'codex', primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 4320 }, secondary: { usedPercent: 5, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 432000 } } }, lastCheckedAt: Date.now() },
+    { id: 'codex', name: 'Codex', installed: true, connected: true, message: '已连接', executable: '/usr/local/bin/codex', quota: { rateLimits: { limitId: 'codex', primary: { usedPercent: 32, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 4320 }, secondary: { usedPercent: 34, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 432000 } } }, lastCheckedAt: Date.now() },
     { id: 'claude-code', name: 'Claude Code', installed: true, connected: true, message: '已连接 · 本地桥接', executable: '/usr/local/bin/claude', quota: { rateLimits: { limitId: 'claude-code', primary: { usedPercent: 64, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 4320 }, secondary: { usedPercent: 22, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 432000 } } }, lastCheckedAt: Date.now() }
   ],
   connection: 'connected',
@@ -30,8 +31,8 @@ const demoSnapshot: RelaySnapshot = {
     ordinaryUsageAllowed: true,
     rateLimits: {
       limitId: 'codex',
-      primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 60 * 72 },
-      secondary: { usedPercent: 5, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 86400 * 5 },
+      primary: { usedPercent: 32, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 60 * 72 },
+      secondary: { usedPercent: 34, windowDurationMins: 10080, resetsAt: Date.now() / 1000 + 86400 * 5 },
       planType: 'plus'
     }
   },
@@ -70,7 +71,7 @@ export function App(): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>(new URLSearchParams(location.search).has('claude') ? 'claude-code' : 'codex')
   const [errorMessage, setErrorMessage] = useState('')
-  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '1.2.0', message: '启动后自动检查更新' })
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle', currentVersion: '1.2.1', message: '启动后自动检查更新' })
   const provider = snapshot?.providers.find(item => item.id === selectedProvider)
   const providerThreads = snapshot?.threads.filter(thread => (thread.provider ?? 'codex') === selectedProvider) ?? []
 
@@ -308,23 +309,6 @@ function LoadingScreen(): React.JSX.Element {
 
 function LogoMark(): React.JSX.Element {
   return <div className="logo-mark"><Moon /></div>
-}
-
-function QuotaCard({ title, window, accent }: { title: string; window?: QuotaWindow | null; accent: 'coral' | 'blue' }): React.JSX.Element {
-  const percent = Math.min(100, Math.max(0, Math.round(window?.usedPercent ?? 0)))
-  return (
-    <article className={`quota-card ${accent}`}>
-      <div className="quota-heading">
-        <span>{title}</span>
-        <strong>{window && window.usageKnown !== false ? `${percent}%` : '—'}</strong>
-      </div>
-      <div className="meter"><i style={{ width: `${percent}%` }} /></div>
-      <div className="quota-footer">
-        <span>{!window || window.usageKnown === false ? '用量尚未同步' : percent >= 100 ? '等待刷新' : '仍可安心工作'}</span>
-        <time>{window ? `${formatDate(window.resetsAt * 1000)} 刷新` : '等待额度信息'}</time>
-      </div>
-    </article>
-  )
 }
 
 function PanelTitle({ icon, title, subtitle, action }: { icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }): React.JSX.Element {

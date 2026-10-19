@@ -19,6 +19,8 @@
 
 Hrrrwork 为 Codex 和 Claude Code 值夜班。自动检测本机应用，按应用显示额度、连接状态与任务；窗口固定贴合边框，内容只在列表内部滚动。
 
+额度卡片的百分比和进度条均表示**剩余额度**：100% 为可用额度充足，0% 为已用尽；例如已使用 32% 会显示「剩余 68%」。数据尚未同步时显示「—」。
+
 | 模式 | 什么时候发送 | 发送内容 |
 |---|---|---|
 | 中断接力 | 额度耗尽且原任务中断，等待刷新后 | 向原任务发送 `continue` |
@@ -118,19 +120,19 @@ Codex 从本机 `model/list` 中优先选择 GPT-6 Luna，再选择 GPT-5.6 Luna
 macOS：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.0/Hrrrwork-1.2.0-mac-universal.dmg' -o Hrrrwork.dmg
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.1/Hrrrwork-1.2.1-mac-universal.dmg' -o Hrrrwork.dmg
 ```
 
 Windows PowerShell：
 
 ```powershell
-Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.0/Hrrrwork-1.2.0-win-x64.exe' -OutFile Hrrrwork.exe
+Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.1/Hrrrwork-1.2.1-win-x64.exe' -OutFile Hrrrwork.exe
 ```
 
 Linux：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.0/Hrrrwork-1.2.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.2.1/Hrrrwork-1.2.1-linux-x86_64.AppImage' -o Hrrrwork.AppImage
 chmod +x Hrrrwork.AppImage
 ```
 
