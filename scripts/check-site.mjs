@@ -20,7 +20,7 @@ app.whenReady().then(async () => {
         }
         return selected;
       })()`)
-      if (commands.length !== 3 || commands.some(item => item.selected !== 'true' || !item.command.includes('v1.1.0'))) throw new Error('Download commands did not switch correctly')
+      if (commands.length !== 3 || commands.some(item => item.selected !== 'true' || !item.command.includes('v1.2.0'))) throw new Error('Download commands did not switch correctly')
       const report = await window.webContents.executeJavaScript(`({
         title: document.title,
         viewport: innerWidth,

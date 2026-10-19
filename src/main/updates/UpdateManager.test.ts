@@ -119,7 +119,8 @@ describe('update download', () => {
     expect(await fs.readdir(directory)).toEqual([])
   })
   it('starts checking after 12s and repeats every six hours; switch off cancels the timer', async () => {
-    const { directory, fetcher } = await manager()
+    // Keep this timer-only test free of real filesystem I/O racing the fake clock.
+    const { directory, fetcher } = await manager(bytes, release('1.2.0'))
     vi.useFakeTimers()
     const updater = new UpdateManager({ version: '1.2.0', directory, platform: 'linux', arch: 'x64', fetch: fetcher as typeof fetch })
     updater.configure({ autoCheck: true, autoDownload: false })
