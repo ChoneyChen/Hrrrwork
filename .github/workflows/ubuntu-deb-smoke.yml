@@ -1,0 +1,36 @@
+name: Ubuntu Codex DEB smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/main/codex/**'
+      - 'src/main/providers/cliLaunch.ts'
+      - 'scripts/fixtures/**'
+      - '.github/workflows/ubuntu-deb-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-deb:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Download and verify official Codex desktop DEB
+        shell: bash
+        run: |
+          curl --fail --location --retry 2 --max-time 240 'https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1013.40934_amd64.deb' --output "${{ runner.temp }}/chatgpt.deb"
+          echo '3ca59e7f9a6641b9e2fb9ad680683784b5ab8026ff7418fb212a0ebe5df3a1d7  ${{ runner.temp }}/chatgpt.deb' | sha256sum --check
+          dpkg-deb --extract "${{ runner.temp }}/chatgpt.deb" "${{ runner.temp }}/codex-deb"
+      - name: Test live process discovery and bundled app-server handshake
+        run: npx vitest run src/main/codex/findCodex.test.ts
+        env:
+          HRRRWORK_CODEX_DEB_ROOT: ${{ runner.temp }}/codex-deb
