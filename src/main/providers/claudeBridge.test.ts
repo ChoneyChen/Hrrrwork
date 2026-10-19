@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { ClaudeCode } from './ClaudeCode'
+import { WAKE_PROMPT } from '../../shared/types'
 
 let fixture = ''
 afterEach(async () => {
@@ -13,6 +14,33 @@ afterEach(async () => {
 })
 
 describe('Claude bridge lifecycle', () => {
+  it('creates a bounded wake with the selected model and no built-in or MCP tools', async () => {
+    fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'hrrrwork-claude-wake-'))
+    const adapter = new ClaudeCode('/unused/claude-bridge.cjs')
+    const launch = vi.spyOn(adapter as unknown as { launch: (id: string, cwd: string, args: string[], wake: boolean) => Promise<void> }, 'launch').mockResolvedValue()
+    const starting = vi.fn(async () => {})
+    const result = await adapter.wake(null, 'haiku', fixture, starting)
+    expect(result.threadId).toMatch(/^claude:[a-f0-9-]{36}$/)
+    expect(starting).toHaveBeenCalledWith(result.threadId)
+    const [id, cwd, args, wake] = launch.mock.calls[0]
+    expect(cwd).toBe(fixture); expect(wake).toBe(true)
+    expect(args).toEqual(expect.arrayContaining(['--session-id', id, '-p', WAKE_PROMPT, '--model', 'haiku', '--tools', '', '--disallowedTools', 'mcp__*', '--max-turns', '1']))
+    expect(args).not.toContain('--dangerously-skip-permissions')
+  })
+
+  it('only resumes the explicitly selected idle Claude session', async () => {
+    fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'hrrrwork-claude-target-'))
+    const adapter = new ClaudeCode('/unused/claude-bridge.cjs')
+    const launch = vi.spyOn(adapter as unknown as { launch: (id: string, cwd: string, args: string[], wake: boolean) => Promise<void> }, 'launch').mockResolvedValue()
+    adapter.sessions.set('chosen', { sessionId: 'chosen', cwd: fixture, name: 'Chosen', revision: 'r1', status: 'active', updatedAt: Date.now(), quota: null })
+    await expect(adapter.wake('chosen', 'sonnet', fixture)).rejects.toThrow('空闲')
+    expect(launch).not.toHaveBeenCalled()
+    adapter.sessions.get('chosen')!.status = 'idle'
+    await adapter.wake('chosen', 'sonnet', fixture)
+    expect(launch.mock.calls[0][2]).toEqual(expect.arrayContaining(['--resume', 'chosen', '--model', 'sonnet']))
+    expect(launch.mock.calls[0][2]).not.toContain('--session-id')
+  })
+
   it('keeps hooks and status line, captures quota failure, and sees manual continuation', async () => {
     fixture = await fs.mkdtemp(path.join(os.tmpdir(), 'hrrrwork-bridge-'))
     vi.spyOn(os, 'homedir').mockReturnValue(fixture)
@@ -56,6 +84,11 @@ describe('Claude bridge lifecycle', () => {
     emit({ hook_event_name: 'UserPromptSubmit' })
     await adapter.refresh(process.execPath)
     expect(adapter.sessions.get('fixture-session')?.status).toBe('active')
+    adapter['captureQuota']({ status: 'allowed', rateLimitType: 'five_hour', resetsAt: 9999999999 })
+    adapter['captureQuota']({ status: 'allowed', rateLimitType: 'seven_day', resetsAt: 99999999999, utilization: .35 })
+    await adapter.refresh(process.execPath)
+    expect(adapter.snapshot().quota?.rateLimits?.primary?.usageKnown).toBe(false)
+    expect(adapter.snapshot().quota?.rateLimits?.secondary?.usedPercent).toBe(35)
     await adapter.disconnect()
     const restored = JSON.parse(await fs.readFile(configFile, 'utf8'))
     expect(restored.statusLine).toEqual(original.statusLine)

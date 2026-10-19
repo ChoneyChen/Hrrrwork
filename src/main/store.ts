@@ -1,9 +1,11 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import type { RelayEvent, RelayQueueItem, RelaySettings } from '../shared/types'
+import { DEFAULT_QUOTA_WAKE, type ProviderId, type RelayEvent, type RelayQueueItem, type RelaySettings, type WakePlan } from '../shared/types'
 
 export interface PersistedState {
   dispatched: string[]
+  wakePlans: Partial<Record<ProviderId, WakePlan>>
+  wakeReceipts: string[]
   settings: RelaySettings
   queue: RelayQueueItem[]
   events: RelayEvent[]
@@ -18,14 +20,31 @@ export const DEFAULT_SETTINGS: RelaySettings = {
   startAtLogin: false,
   watchedThreadIds: [],
   codexPath: '',
-  claudePath: ''
+  claudePath: '',
+  quotaWake: structuredClone(DEFAULT_QUOTA_WAKE)
 }
 
 const DEFAULT_STATE: PersistedState = {
   dispatched: [],
+  wakePlans: {},
+  wakeReceipts: [],
   settings: DEFAULT_SETTINGS,
   queue: [],
   events: []
+}
+
+function restoreWakePlans(raw: PersistedState['wakePlans'] = {}): PersistedState['wakePlans'] {
+  const plans: PersistedState['wakePlans'] = {}
+  for (const id of ['codex', 'claude-code'] as ProviderId[]) {
+    const plan = raw[id]
+    if (!plan || !Number.isFinite(plan.resetAt) || !Number.isFinite(plan.scheduledFor) || !['waiting', 'dispatching', 'submitted', 'completed', 'skipped', 'failed'].includes(plan.status)) continue
+    plans[id] = { ...plan }
+    if (plan.status === 'dispatching' || plan.status === 'submitted') {
+      plans[id]!.status = 'failed'
+      plans[id]!.message = '上次唤醒已提交或结果未知，本窗口不会重复发送。'
+    }
+  }
+  return plans
 }
 
 export class JsonStore {
@@ -40,7 +59,12 @@ export class JsonStore {
       const parsed = JSON.parse(raw) as Partial<PersistedState>
       this.state = {
         dispatched: Array.isArray(parsed.dispatched) ? parsed.dispatched.slice(-200) : [],
-        settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+        wakePlans: restoreWakePlans(parsed.wakePlans),
+        wakeReceipts: Array.isArray(parsed.wakeReceipts) ? parsed.wakeReceipts.slice(-200) : [],
+        settings: { ...DEFAULT_SETTINGS, ...parsed.settings, quotaWake: {
+          codex: { ...DEFAULT_QUOTA_WAKE.codex, ...parsed.settings?.quotaWake?.codex },
+          'claude-code': { ...DEFAULT_QUOTA_WAKE['claude-code'], ...parsed.settings?.quotaWake?.['claude-code'] }
+        } },
         queue: Array.isArray(parsed.queue) ? parsed.queue : [],
         events: Array.isArray(parsed.events) ? parsed.events.slice(0, 80) : []
       }

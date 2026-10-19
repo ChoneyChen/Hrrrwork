@@ -2,7 +2,7 @@
   <img src="resources/icon.svg" width="116" alt="Hrrrwork logo" />
   <h1>Hrrrwork · 睡眠接力</h1>
   <p><strong>你去睡，任务别停。</strong></p>
-  <p>当 Codex / Claude Code 因 5 小时或每周额度中断，Hrrrwork 等到刷新，再把 <code>continue</code> 递回原任务。</p>
+  <p>额度中断时接力，空闲时轻量唤醒。为 Codex / Claude Code 留一盏小小的工作灯。</p>
 
   [![macOS](https://img.shields.io/badge/macOS-supported-26314f?logo=apple&logoColor=white)](#安装)
   [![Windows](https://img.shields.io/badge/Windows-supported-26314f?logo=windows&logoColor=white)](#安装)
@@ -18,6 +18,13 @@
 ## 它做什么
 
 Hrrrwork 为 Codex 和 Claude Code 值夜班。自动检测本机应用，按应用显示额度、连接状态与任务；窗口固定贴合边框，内容只在列表内部滚动。
+
+| 模式 | 什么时候发送 | 发送内容 |
+|---|---|---|
+| 中断接力 | 额度耗尽且原任务中断，等待刷新后 | 向原任务发送 `continue` |
+| 额度唤醒 · 可选 | 即使任务未中断、额度未用完，也在已知五小时窗口刷新后 | 向新对话或指定空闲对话发送 `唤醒，仅需回复收到` |
+
+### 中断接力
 
 1. 同步各应用的 5 小时与每周额度窗口；
 2. 额度真正耗尽时，确认最近任务是否以 `interrupted` / `failed` 状态结束；
@@ -67,24 +74,46 @@ Hrrrwork 为 Codex 和 Claude Code 值夜班。自动检测本机应用，按应
 
 只有明确的额度错误与已知刷新时间会安排接力，缺少额度信息时显示等待。手动继续会使旧接力失效。接力使用本机 CLI 和原会话 ID，沿用 Claude 的权限设置；需要批准时请打开原会话处理。
 
+### 额度唤醒
+
+v1.1 新增，两个应用可分别开启，与「自动接力」独立运行，新安装与升级后均默认关闭。
+
+1. 打开设置中的「额度唤醒」，选择 Codex 或 Claude Code；
+2. 开启对应应用的唤醒开关；
+3. 默认每次新开专用对话，以减少历史上下文。也可选一个已有的空闲对话；
+4. 模型默认「自动 · 优先轻量模型」，也可自行选择；
+5. 保持应用后台运行，主界面会显示唤醒计划。
+
+固定消息是 **“唤醒，仅需回复收到”**。按已知的官方五小时 `resetsAt` 加设置中的缓冲等待，不要求任务中断或用量达到 100%。这里的刷新指官方报告的额度窗口重置，并非要求“已使用 100%”。
+
+Codex 从本机 `model/list` 中优先选择 GPT-6 Luna，再选择 GPT-5.6 Luna，并使用该模型支持的最低推理档位和标准速度；没有已知轻量模型时等待用户选择，不自动切换到更贵的模型。Claude Code 默认使用 `haiku` 别名，可选 Sonnet、Opus 或填写完整模型 ID；实际模型可用性与别名映射以本机客户端和账号策略为准。[Codex 模型与档位](https://learn.chatgpt.com/docs/app-server#models)、[官方额度／积分说明](https://learn.chatgpt.com/docs/pricing)、[Claude 模型配置](https://code.claude.com/docs/en/model-config)。
+
+保护措施：
+
+- 每个官方五小时刷新时间最多尝试一次，发送记录在发起前持久化；重启、超时或结果不确定时不盲目重发。
+- 已有工作或接力时不打扰；已用完的周额度会顺延，超过计划 30 分钟的旧唤醒不补发。
+- 若官方已报告新窗口且有用量，跳过多余唤醒；下一次只根据新报告的真实刷新时间安排，不自行假设“当前时间 + 5 小时”。
+- 选择已有对话会新增消息、携带历史上下文，并可能改变该对话后续使用的模型；新对话更省用量。
+- 唤醒本身会消耗少量用量，不保证免费、恰好恢复 100% 或“锁定”五小时窗口。不同模型可能使用不同计量桶，唤醒一个模型不保证其他模型的窗口起算。实际起算、额度和费用由服务方决定；缺少刷新时间时等待同步。
+
 ### 命令行下载
 
 macOS：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-mac-universal.dmg' -o Hrrrwork.dmg
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-mac-universal.dmg' -o Hrrrwork.dmg
 ```
 
 Windows PowerShell：
 
 ```powershell
-Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-win-x64.exe' -OutFile Hrrrwork.exe
+Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-win-x64.exe' -OutFile Hrrrwork.exe
 ```
 
 Linux：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage
 chmod +x Hrrrwork.AppImage
 ```
 
@@ -99,9 +128,13 @@ flowchart LR
     E --> F{原中断轮次仍是最新?}
     F -->|否| G[取消，避免重复]
     F -->|是| H[向同一线程发送 continue]
+    B --> I{额度唤醒已开启?}
+    I -->|是| J[等待已知五小时刷新]
+    J --> K{空闲且本窗口未尝试?}
+    K -->|是| L[轻量模型发送固定唤醒消息]
 ```
 
-核心由四层组成：
+核心由以下几层组成：
 
 ```text
 src/main/codex/   官方 App Server 连接与跨平台路径发现
@@ -139,6 +172,7 @@ npm run package:linux  # Linux 安装包
 - 不上传对话、配置或令牌到第三方服务器；
 - 事件日志仅记录“连接、发现中断、接力成功/失败”等摘要，不记录对话正文；
 - 自动发送仅限你开启守护的范围，且内容默认为 `continue`；
+- 可选的额度唤醒默认关闭，开启后会发送固定短消息；不消耗任何额度重置券，也不绕过服务方限制；
 - 额度数据缺失、权限待批准或接口变化时，界面会显示等待或需要检查。
 
 发现安全问题请不要公开贴出账号数据或线程内容，可通过仓库的 Security advisory 私下报告。
@@ -152,6 +186,7 @@ npm run package:linux  # Linux 安装包
 - [x] Claude Code 检测、额度同步与原会话接力
 - [x] 固定窗口布局与列表内滚动
 - [x] 三平台命令行下载
+- [x] 独立额度唤醒、新对话 / 指定对话、轻量模型选择
 - [ ] 更多语言
 - [ ] 可选的接力统计卡片
 

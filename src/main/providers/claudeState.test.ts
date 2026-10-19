@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { claudeTurn, parseClaudeQuota, type ClaudeSessionState } from './claudeState'
+import { claudeStreamLimits, claudeTurn, parseClaudeQuota, type ClaudeSessionState } from './claudeState'
 import { bridgeCommand } from './ClaudeCode'
 import { classifyLimit, sameUnfinishedTurn } from '../relay/logic'
 
@@ -11,6 +11,16 @@ describe('Claude Code adapter', () => {
   it('does not invent quota for missing or malformed subscription data', () => {
     expect(parseClaudeQuota(undefined)).toBeNull()
     expect(parseClaudeQuota({ five_hour: { used_percentage: null, resets_at: null } })).toBeNull()
+  })
+  it('captures CLI stream reset timestamps without pretending unknown utilization is 0%', () => {
+    const quota = parseClaudeQuota(claudeStreamLimits({ status: 'allowed', rateLimitType: 'five_hour', resetsAt: 9000 }))
+    expect(quota?.rateLimits?.primary).toMatchObject({ usageKnown: false, resetsAt: 9000 })
+    expect(classifyLimit(quota, 1000).reached).toBe(false)
+    const measured = parseClaudeQuota(claudeStreamLimits({ status: 'allowed', rateLimitType: 'five_hour', resetsAt: 9000, utilization: .32 }))
+    expect(measured?.rateLimits?.primary?.usedPercent).toBe(32)
+    const rejected = parseClaudeQuota(claudeStreamLimits({ status: 'rejected', rateLimitType: 'seven_day', resetsAt: 9000 }))
+    expect(classifyLimit(rejected, 1000).reason).toBe('weekly')
+    expect(claudeStreamLimits({ status: 'allowed', rateLimitType: 'overage', resetsAt: 9000 })).toBeNull()
   })
   it('a new active prompt cancels an old queued failure', () => {
     const failed: ClaudeSessionState = { sessionId: 'session', cwd: '/project', name: 'test', revision: 'r1', updatedAt: 100000, quota: null, status: 'rate-limited' }

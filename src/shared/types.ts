@@ -1,6 +1,36 @@
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error'
 export type ProviderId = 'codex' | 'claude-code'
 
+export interface WakeModel {
+  id: string
+  name: string
+  efforts?: string[]
+}
+
+export interface QuotaWakeSettings {
+  enabled: boolean
+  target: 'new' | 'existing'
+  threadId: string
+  model: string
+}
+
+export interface WakePlan {
+  resetAt: number
+  scheduledFor: number
+  status: 'waiting' | 'dispatching' | 'submitted' | 'completed' | 'skipped' | 'failed'
+  message: string
+  threadId?: string
+  turnId?: string
+  model?: string
+  sentAt?: number
+}
+
+export const WAKE_PROMPT = '唤醒，仅需回复收到'
+export const DEFAULT_QUOTA_WAKE: Record<ProviderId, QuotaWakeSettings> = {
+  codex: { enabled: false, target: 'new', threadId: '', model: 'auto' },
+  'claude-code': { enabled: false, target: 'new', threadId: '', model: 'auto' }
+}
+
 export interface ProviderSnapshot {
   id: ProviderId
   name: string
@@ -10,10 +40,12 @@ export interface ProviderSnapshot {
   executable: string
   quota: RateLimitResponse | null
   lastCheckedAt: number | null
+  models?: WakeModel[]
 }
 
 export interface QuotaWindow {
   usedPercent: number
+  usageKnown?: boolean
   windowDurationMins: number
   resetsAt: number
 }
@@ -85,6 +117,7 @@ export interface RelaySettings {
   watchedThreadIds: string[]
   codexPath: string
   claudePath: string
+  quotaWake: Record<ProviderId, QuotaWakeSettings>
 }
 
 export interface RelaySnapshot {
@@ -97,6 +130,7 @@ export interface RelaySnapshot {
   queue: RelayQueueItem[]
   events: RelayEvent[]
   settings: RelaySettings
+  wakePlans: Partial<Record<ProviderId, WakePlan>>
   lastCheckedAt: number | null
 }
 

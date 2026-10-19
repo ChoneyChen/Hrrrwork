@@ -1,5 +1,8 @@
 import { EventEmitter } from 'node:events'
-import type {
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type WakeModel,
   ConnectionState,
   RateLimitResponse,
   RelayEvent,
@@ -11,11 +14,12 @@ import type {
 } from '../../shared/types'
 import { CodexAppServer } from '../codex/CodexAppServer'
 import { findCodexExecutable } from '../codex/findCodex'
-import { JsonStore, type PersistedState } from '../store'
-import { classifyLimit, sameUnfinishedTurn, shouldQueueTurn } from './logic'
+import { DEFAULT_SETTINGS, JsonStore, type PersistedState } from '../store'
+import { classifyLimit, getPrimaryLimits, sameUnfinishedTurn, shouldQueueTurn } from './logic'
 import { ClaudeCode } from '../providers/ClaudeCode'
 import { claudeTurn } from '../providers/claudeState'
 import { findExecutable } from '../providers/executable'
+import { lowestEffort, QuotaWake } from './QuotaWake'
 
 interface ThreadListResult {
   data: ThreadSummary[]
@@ -30,7 +34,9 @@ type LoginItemSetter = (enabled: boolean) => Promise<void> | void
 type NotificationSender = (title: string, body: string) => void
 
 export class RelayEngine extends EventEmitter {
-  private state: PersistedState = { settings: {} as RelaySettings, queue: [], events: [], dispatched: [] }
+  private state: PersistedState = { settings: structuredClone(DEFAULT_SETTINGS), queue: [], events: [], dispatched: [], wakePlans: {}, wakeReceipts: [] }
+  private wake = new QuotaWake()
+  private models: WakeModel[] = []
   private client: CodexAppServer | null = null
   private connection: ConnectionState = 'disconnected'
   private connectionMessage = '尚未连接'
@@ -48,11 +54,15 @@ export class RelayEngine extends EventEmitter {
     private readonly store: JsonStore,
     private readonly setLoginItem: LoginItemSetter,
     private readonly notifyUser: NotificationSender,
-    private readonly claude: ClaudeCode
+    private readonly claude: ClaudeCode,
+    private readonly wakeDirectory = path.join(os.homedir(), '.hrrrwork', 'wake')
   ) {
     super()
     this.claude.on('run-ended', (_sessionId: string, success: boolean) => {
       this.addEvent(success ? 'success' : 'warning', success ? 'Claude Code 接力轮次已结束。' : 'Claude Code 本轮需要检查，请打开原会话查看权限或错误。')
+    })
+    this.claude.on('wake-ended', (sessionId: string, success: boolean) => {
+      if (this.wake.complete(this.state, 'claude-code', `claude:${sessionId}`, success)) this.addEvent(success ? 'success' : 'warning', this.state.wakePlans['claude-code']!.message)
     })
   }
 
@@ -76,7 +86,7 @@ export class RelayEngine extends EventEmitter {
       providers: [{
         id: 'codex', name: 'Codex', installed: this.codexInstalled,
         connected: this.connection === 'connected', message: this.connectionMessage,
-        executable: this.codexPath, quota: this.quota, lastCheckedAt: this.lastCheckedAt
+        executable: this.codexPath, quota: this.quota, lastCheckedAt: this.lastCheckedAt, models: this.models
       }, this.claude.snapshot()],
       connection: this.connection,
       connectionMessage: this.connectionMessage,
@@ -86,6 +96,7 @@ export class RelayEngine extends EventEmitter {
       queue: structuredClone(this.state.queue),
       events: structuredClone(this.state.events),
       settings: structuredClone(this.state.settings),
+      wakePlans: structuredClone(this.state.wakePlans),
       lastCheckedAt: this.lastCheckedAt
     }
   }
@@ -124,12 +135,26 @@ export class RelayEngine extends EventEmitter {
     if (safePatch.continuePrompt !== undefined) {
       safePatch.continuePrompt = safePatch.continuePrompt.trim().slice(0, 500) || 'continue'
     }
+    if (patch.quotaWake) {
+      safePatch.quotaWake = structuredClone(this.state.settings.quotaWake)
+      for (const id of ['codex', 'claude-code'] as ProviderId[]) {
+        const change = patch.quotaWake[id]
+        if (!change) continue
+        safePatch.quotaWake[id] = {
+          enabled: change.enabled === true,
+          target: change.target === 'existing' ? 'existing' : 'new',
+          threadId: typeof change.threadId === 'string' ? change.threadId.slice(0, 200) : '',
+          model: typeof change.model === 'string' ? change.model.trim().slice(0, 160) || 'auto' : 'auto'
+        }
+      }
+    }
     this.state.settings = { ...this.state.settings, ...safePatch }
     await this.store.set(this.state)
     if (patch.startAtLogin !== undefined) await this.setLoginItem(patch.startAtLogin)
     if (patch.pollIntervalSeconds !== undefined) this.resetInterval()
     if (patch.codexPath !== undefined && patch.codexPath !== previousPath) await this.reconnect()
     if (patch.claudePath !== undefined) await this.claude.refresh(patch.claudePath)
+    if (patch.quotaWake) await this.tick(true)
     this.emitState()
     return this.snapshot()
   }
@@ -170,10 +195,15 @@ export class RelayEngine extends EventEmitter {
           if (update?.rateLimits) this.quota = { ...this.quota, ...update }
           this.emitState()
         }
+        if (method === 'turn/completed') {
+          const result = params as { threadId?: string; turn?: { id?: string; status?: string } }
+          if (result.threadId && this.wake.complete(this.state, 'codex', result.threadId, result.turn?.status === 'completed', result.turn?.id)) this.addEvent(result.turn?.status === 'completed' ? 'success' : 'warning', this.state.wakePlans.codex!.message)
+        }
       })
       await this.client.start()
       this.connection = 'connected'
       this.connectionMessage = 'Codex 已连接'
+      await this.loadModels()
       this.addEvent('success', '已连接 Codex，开始巡夜。')
       await this.tick(true)
     } catch (error) {
@@ -209,7 +239,7 @@ export class RelayEngine extends EventEmitter {
 
   private async tick(force = false): Promise<void> {
     if (this.ticking) return
-    if (!force && !this.state.settings.enabled) return
+    if (!force && !this.state.settings.enabled && !Object.values(this.state.settings.quotaWake).some(setting => setting.enabled)) return
     this.ticking = true
     try {
       await this.claude.refresh(this.state.settings.claudePath)
@@ -230,10 +260,13 @@ export class RelayEngine extends EventEmitter {
       }
       this.threads = dedupeThreads([...codexThreads, ...this.claude.threads()])
       this.lastCheckedAt = Date.now()
+      const relayProviders = new Set<ProviderId>()
       if (this.state.settings.enabled) {
         await this.detectInterruptedTurns()
+        for (const item of this.state.queue) relayProviders.add(item.provider ?? 'codex')
         await this.processDueQueue()
       }
+      await this.processQuotaWake(relayProviders)
     } catch (error) {
       this.connectionMessage = error instanceof Error ? error.message : String(error)
       this.addEvent('warning', `本轮检查未完成：${this.connectionMessage}`)
@@ -241,6 +274,69 @@ export class RelayEngine extends EventEmitter {
       this.ticking = false
       this.emitState()
     }
+  }
+
+  private async loadModels(): Promise<void> {
+    this.models = []
+    if (!this.client) return
+    try {
+      let cursor: string | undefined
+      for (let page = 0; page < 5; page++) {
+        const result = await this.client.call<{ data: { model: string; displayName: string; supportedReasoningEfforts?: { reasoningEffort: string }[] }[]; nextCursor?: string | null }>('model/list', { limit: 100, includeHidden: false, ...(cursor ? { cursor } : {}) })
+        this.models.push(...result.data.map(model => ({ id: model.model, name: model.displayName, efforts: model.supportedReasoningEfforts?.map(option => option.reasoningEffort) })))
+        if (!result.nextCursor) break
+        cursor = result.nextCursor
+      }
+    } catch { /* An unavailable catalog must not block normal interrupted-task relay. */ }
+  }
+
+  private async processQuotaWake(relayProviders: Set<ProviderId>): Promise<void> {
+    for (const provider of this.snapshot().providers) {
+      const active = this.threads.some(thread => (thread.provider ?? 'codex') === provider.id && ['active', 'inProgress'].includes(thread.status?.type ?? ''))
+      await this.wake.check({
+        id: provider.id, connected: provider.connected, quota: provider.quota, models: provider.models ?? [],
+        busy: active || relayProviders.has(provider.id) || (provider.id === 'claude-code' && this.claude.hasActiveWork()),
+        send: (settings, model) => this.sendQuotaWake(provider.id, settings, model)
+      }, this.state, () => this.store.set(this.state), (message, success) => this.addEvent(success ? 'info' : 'warning', message))
+    }
+  }
+
+  private async sendQuotaWake(provider: ProviderId, settings: QuotaWakeSettings, model: WakeModel): Promise<{ threadId: string; turnId?: string }> {
+    if (!this.state.settings.quotaWake[provider].enabled) throw new Error('额度唤醒已关闭。')
+    if (provider === 'claude-code') {
+      if (settings.target === 'existing' && !settings.threadId.startsWith('claude:')) throw new Error('请选择 Claude Code 对话。')
+      return this.claude.wake(settings.target === 'existing' ? settings.threadId.slice(7) : null, model.id, this.wakeDirectory, async threadId => {
+        const plan = this.state.wakePlans['claude-code']
+        if (plan) { plan.threadId = threadId; await this.store.set(this.state) }
+      })
+    }
+    if (!this.client || this.connection !== 'connected') throw new Error('Codex 未连接。')
+    this.quota = await this.client.call<RateLimitResponse>('account/rateLimits/read')
+    if (!getPrimaryLimits(this.quota)?.primary) throw new Error('无法确认额度状态，未发送唤醒。')
+    if (classifyLimit(this.quota).reached) throw new Error('额度尚未恢复可用。')
+    let threadId: string
+    if (settings.target === 'existing') {
+      if (settings.threadId.startsWith('claude:')) throw new Error('请选择 Codex 对话。')
+      const latest = await this.latestTurn(settings.threadId)
+      if (latest && latest.status !== 'completed') throw new Error('指定对话不是空闲状态，未发送唤醒。')
+      await this.client.call('thread/resume', { threadId: settings.threadId, excludeTurns: true })
+      threadId = settings.threadId
+    } else {
+      await fs.mkdir(this.wakeDirectory, { recursive: true })
+      const result = await this.client.call<{ thread: { id: string }; model?: string }>('thread/start', {
+        model: model.id, serviceTier: 'default', allowProviderModelFallback: false, cwd: this.wakeDirectory, sandbox: 'read-only', approvalPolicy: 'untrusted',
+        baseInstructions: '这是一轮简短的额度唤醒。只回复「收到」。不要调用工具、读取文件、执行命令或开展其他工作。'
+      })
+      if (result.model && result.model !== model.id) throw new Error('客户端切换了所选模型，未发送唤醒。')
+      threadId = result.thread.id
+    }
+    const plan = this.state.wakePlans.codex
+    if (plan) { plan.threadId = threadId; await this.store.set(this.state) }
+    const result = await this.client.call<{ turn: { id: string } }>('turn/start', {
+      threadId, model: model.id, serviceTierForTurn: 'default', ...(lowestEffort(model) ? { effort: lowestEffort(model) } : {}),
+      input: [{ type: 'text', text: WAKE_PROMPT }]
+    })
+    return { threadId, turnId: result.turn.id }
   }
 
   private async detectInterruptedTurns(): Promise<void> {

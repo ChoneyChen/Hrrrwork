@@ -4,8 +4,12 @@ import { ClaudeCode } from '../providers/ClaudeCode'
 import { DEFAULT_SETTINGS, type JsonStore } from '../store'
 import type { CodexAppServer } from '../codex/CodexAppServer'
 import type { ClaudeSessionState } from '../providers/claudeState'
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { WAKE_PROMPT } from '../../shared/types'
 
-function fixture(resetOffset = 300) {
+function fixture(resetOffset = 300, wakeDirectory?: string) {
   const now = Date.now()
   const claude = new ClaudeCode('/unused/claude-bridge.cjs')
   const session: ClaudeSessionState = {
@@ -18,8 +22,8 @@ function fixture(resetOffset = 300) {
   vi.spyOn(claude, 'snapshot').mockReturnValue({ id: 'claude-code', name: 'Claude Code', installed: true, connected: true, message: '', executable: '/claude', quota: session.quota, lastCheckedAt: now })
   const resume = vi.spyOn(claude, 'resume').mockResolvedValue()
   const store = { set: vi.fn(async () => {}) } as unknown as JsonStore
-  const engine = new RelayEngine(store, () => {}, () => {}, claude)
-  engine['state'] = { settings: { ...DEFAULT_SETTINGS, watchedThreadIds: [] }, queue: [], events: [], dispatched: [] }
+  const engine = new RelayEngine(store, () => {}, () => {}, claude, wakeDirectory)
+  engine['state'] = { settings: structuredClone(DEFAULT_SETTINGS), queue: [], events: [], dispatched: [], wakePlans: {}, wakeReceipts: [] }
   engine['threads'] = claude.threads()
   return { engine, claude, session, resume, store }
 }
@@ -53,5 +57,58 @@ describe('multi-provider relay safety', () => {
     await engine.sendNow(id)
     expect(resume).not.toHaveBeenCalled()
     expect(engine.snapshot().queue).toHaveLength(0)
+  })
+})
+
+describe('wake provider dispatch', () => {
+  it('creates a short readonly Codex conversation even when interrupted-task relay is off', async () => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'hrrrwork-wake-dispatch-'))
+    try {
+      const { engine } = fixture(300, directory)
+      engine['state'].settings.enabled = false
+      engine['state'].settings.quotaWake.codex.enabled = true
+      engine['connection'] = 'connected'
+      engine['models'] = [{ id: 'gpt-6-luna', name: 'Luna', efforts: ['medium', 'low'] }]
+      const quota = { ordinaryUsageAllowed: true, rateLimits: { limitId: 'codex', primary: { usedPercent: 20, resetsAt: Date.now() / 1000 - 90, windowDurationMins: 300 } } }
+      const call = vi.fn(async (method: string) => {
+        if (method === 'account/rateLimits/read') return quota
+        if (method === 'thread/list') return { data: [] }
+        if (method === 'thread/start') return { thread: { id: 'new-wake' }, model: 'gpt-6-luna' }
+        if (method === 'turn/start') return { turn: { id: 'new-turn' } }
+        throw new Error(method)
+      })
+      engine['client'] = { call } as unknown as CodexAppServer
+      await engine['tick']()
+      expect(call).toHaveBeenCalledWith('thread/start', expect.objectContaining({ sandbox: 'read-only', model: 'gpt-6-luna', allowProviderModelFallback: false }))
+      expect(call).toHaveBeenCalledWith('turn/start', expect.objectContaining({ threadId: 'new-wake', model: 'gpt-6-luna', effort: 'low', input: [{ type: 'text', text: WAKE_PROMPT }] }))
+      expect(engine.snapshot().wakePlans.codex?.status).toBe('submitted')
+    } finally { await fs.rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('uses the chosen idle Codex conversation, never starts a new one', async () => {
+    const { engine } = fixture()
+    engine['connection'] = 'connected'
+    const settings = { enabled: true, target: 'existing' as const, threadId: 'chosen', model: 'gpt-6-luna' }
+    engine['state'].settings.quotaWake.codex = settings
+    const call = vi.fn(async (method: string) => {
+      if (method === 'account/rateLimits/read') return { rateLimits: { limitId: 'codex', primary: { usedPercent: 0, resetsAt: Date.now() / 1000 + 18000, windowDurationMins: 300 } } }
+      if (method === 'thread/turns/list') return { data: [{ id: 'old-turn', status: 'completed' }] }
+      if (method === 'turn/start') return { turn: { id: 'wake-turn' } }
+      return {}
+    })
+    engine['client'] = { call } as unknown as CodexAppServer
+    await engine['sendQuotaWake']('codex', settings, { id: 'gpt-6-luna', name: 'Luna' })
+    expect(call).toHaveBeenCalledWith('thread/resume', { threadId: 'chosen', excludeTurns: true })
+    expect(call.mock.calls.some(([method]) => method === 'thread/start')).toBe(false)
+  })
+
+  it('refuses a non-idle target instead of appending a wake prompt', async () => {
+    const { engine } = fixture()
+    engine['connection'] = 'connected'
+    engine['state'].settings.quotaWake.codex.enabled = true
+    const call = vi.fn(async (method: string) => method === 'thread/turns/list' ? { data: [{ id: 'active-turn', status: 'inProgress' }] } : { rateLimits: { limitId: 'codex', primary: { usedPercent: 0, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 18000 } } })
+    engine['client'] = { call } as unknown as CodexAppServer
+    await expect(engine['sendQuotaWake']('codex', { enabled: true, target: 'existing', threadId: 'chosen', model: 'auto' }, { id: 'gpt-6-luna', name: 'Luna' })).rejects.toThrow('空闲')
+    expect(call.mock.calls.some(([method]) => method === 'turn/start')).toBe(false)
   })
 })

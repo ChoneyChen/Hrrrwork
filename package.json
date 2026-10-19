@@ -1,7 +1,7 @@
 {
   "name": "hrrrwork",
-  "version": "1.0.0",
-  "description": "A quiet desktop relay for Codex and Claude Code after usage limits reset.",
+  "version": "1.1.0",
+  "description": "Quiet desktop relay and optional quota wake for Codex and Claude Code.",
   "main": "out/main/index.js",
   "author": {
     "name": "Choney",

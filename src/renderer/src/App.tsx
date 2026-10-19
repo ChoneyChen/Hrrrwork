@@ -14,7 +14,7 @@ import {
   WifiOff
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { ProviderId, QuotaWindow, RelaySettings, RelaySnapshot, ThreadSummary } from '../../shared/types'
+import { DEFAULT_QUOTA_WAKE, WAKE_PROMPT, type ProviderId, type QuotaWakeSettings, type QuotaWindow, type RelaySettings, type RelaySnapshot, type ThreadSummary } from '../../shared/types'
 import { Moon } from './Moon'
 
 const demoSnapshot: RelaySnapshot = {
@@ -53,10 +53,13 @@ const demoSnapshot: RelaySnapshot = {
     startAtLogin: false,
     watchedThreadIds: ['demo-2'],
     codexPath: '',
-    claudePath: ''
+    claudePath: '',
+    quotaWake: { ...structuredClone(DEFAULT_QUOTA_WAKE), codex: { ...DEFAULT_QUOTA_WAKE.codex, enabled: true } }
   },
+  wakePlans: { codex: { resetAt: Date.now() / 1000 + 4320, scheduledFor: Date.now() + 4380000, status: 'waiting', message: '等待官方五小时窗口刷新' } },
   lastCheckedAt: Date.now()
 }
+demoSnapshot.providers[0].models = [{ id: 'gpt-6-luna', name: 'GPT-6 Luna' }, { id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' }]
 
 export function App(): React.JSX.Element {
   const isCapture = new URLSearchParams(location.search).has('capture')
@@ -98,6 +101,7 @@ export function App(): React.JSX.Element {
   }
 
   const updateSettings = async (patch: Partial<RelaySettings>): Promise<void> => {
+    if (isCapture) { setSnapshot(previous => previous ? { ...previous, settings: { ...previous.settings, ...patch } } : previous); return }
     try { setSnapshot(await window.hrrrwork.updateSettings(patch)); setErrorMessage('') }
     catch (error) { setErrorMessage(error instanceof Error ? error.message : String(error)) }
   }
@@ -109,7 +113,9 @@ export function App(): React.JSX.Element {
     finally { setBusy(false) }
   }
 
-  const statusText = snapshot.settings.enabled ? '安心睡吧，我在巡夜' : '接力暂时休息中'
+  const wakeSettings = snapshot.settings.quotaWake[selectedProvider]
+  const wakePlan = snapshot.wakePlans[selectedProvider]
+  const statusText = snapshot.settings.enabled ? '安心睡吧，我在巡夜' : wakeSettings.enabled ? '接力休息，唤醒值班中' : '接力暂时休息中'
 
   return (
     <main className="app-shell">
@@ -163,8 +169,8 @@ export function App(): React.JSX.Element {
             <h1>{statusText}</h1>
             <p>
               {snapshot.settings.enabled
-                ? `${provider?.name ?? '应用'} 因额度中断时，我会等到刷新，再稳稳递上 continue。`
-                : '开启守护后，我会继续观察额度与任务状态。'}
+                ? wakeSettings.enabled ? '中断时稳稳接力；空闲时，按刷新计划轻量唤醒。' : `${provider?.name ?? '应用'} 因额度中断时，我会等到刷新，再稳稳递上 continue。`
+                : wakeSettings.enabled ? '自动接力已暂停，额度唤醒仍独立按计划运行。' : '开启守护后，我会继续观察额度与任务状态。'}
             </p>
             <div className="hero-footer">
               <button
@@ -176,6 +182,9 @@ export function App(): React.JSX.Element {
               </button>
               <span className="last-check">上次巡查 {relativeTime(snapshot.lastCheckedAt)}</span>
             </div>
+            <button className={`wake-chip ${wakeSettings.enabled ? 'enabled' : ''}`} onClick={() => setSettingsOpen(true)} title={wakePlan?.message ?? '即使没有中断，也可在刷新后发起一轮简短唤醒'}>
+              <Clock3 size={13} /><span>额度唤醒 · {wakeSettings.enabled ? wakePlan?.status === 'waiting' && wakePlan.scheduledFor > Date.now() ? `${formatDate(wakePlan.scheduledFor)} 计划唤醒` : wakePlan?.message ?? '等待刷新时间' : '未开启'}</span><ChevronDown size={12} />
+            </button>
           </div>
         </article>
 
@@ -262,6 +271,8 @@ export function App(): React.JSX.Element {
       {settingsOpen && (
         <SettingsDrawer
           settings={snapshot.settings}
+          snapshot={snapshot}
+          selectedProvider={selectedProvider}
           codexPath={snapshot.codexPath}
           claudePath={snapshot.providers.find(item => item.id === 'claude-code')?.executable ?? ''}
           onClose={() => setSettingsOpen(false)}
@@ -287,11 +298,11 @@ function QuotaCard({ title, window, accent }: { title: string; window?: QuotaWin
     <article className={`quota-card ${accent}`}>
       <div className="quota-heading">
         <span>{title}</span>
-        <strong>{window ? `${percent}%` : '—'}</strong>
+        <strong>{window && window.usageKnown !== false ? `${percent}%` : '—'}</strong>
       </div>
       <div className="meter"><i style={{ width: `${percent}%` }} /></div>
       <div className="quota-footer">
-        <span>{!window ? '尚未同步' : percent >= 100 ? '等待刷新' : '仍可安心工作'}</span>
+        <span>{!window || window.usageKnown === false ? '用量尚未同步' : percent >= 100 ? '等待刷新' : '仍可安心工作'}</span>
         <time>{window ? `${formatDate(window.resetsAt * 1000)} 刷新` : '等待额度信息'}</time>
       </div>
     </article>
@@ -325,8 +336,10 @@ function TaskRow({ thread, latest, watched, onToggle }: { thread: ThreadSummary;
   )
 }
 
-function SettingsDrawer({ settings, codexPath, claudePath, onClose, onUpdate, onRevealLogs }: {
+function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claudePath, onClose, onUpdate, onRevealLogs }: {
   settings: RelaySettings
+  snapshot: RelaySnapshot
+  selectedProvider: ProviderId
   codexPath: string
   claudePath: string
   onClose: () => void
@@ -344,6 +357,7 @@ function SettingsDrawer({ settings, codexPath, claudePath, onClose, onUpdate, on
           <div><strong>开机自动巡夜</strong><span>登录系统后静默驻留托盘</span></div>
           <input type="checkbox" checked={settings.startAtLogin} onChange={(event) => void onUpdate({ startAtLogin: event.target.checked })} />
         </label>
+        <WakeSettings snapshot={snapshot} initialProvider={selectedProvider} onUpdate={onUpdate} />
         <label className="field">
           <span>接力口令</span>
           <div className="input-with-action">
@@ -376,12 +390,36 @@ function SettingsDrawer({ settings, codexPath, claudePath, onClose, onUpdate, on
         <label className="field">
           <span>Claude Code 可执行文件</span>
           <div className="input-with-action"><input value={draftClaudePath} onChange={event => setDraftClaudePath(event.target.value)} placeholder={claudePath || '自动检测'} /><button onClick={() => void onUpdate({ claudePath: draftClaudePath })}>应用</button></div>
-          <small>连接后同步状态栏与额度中断事件，保留已有状态栏。更新或移动应用后请重新连接。</small>
+          <small>连接后同步状态栏与额度中断事件，保留已有状态栏。</small>
         </label>
         <div className="privacy-note"><ShieldCheck size={17} /><span>本地运行；不读取对话正文，不保存账号令牌。</span></div>
       </aside>
     </div>
   )
+}
+
+function WakeSettings({ snapshot, initialProvider, onUpdate }: { snapshot: RelaySnapshot; initialProvider: ProviderId; onUpdate: (patch: Partial<RelaySettings>) => Promise<void> }): React.JSX.Element {
+  const [id, setId] = useState<ProviderId>(initialProvider)
+  const [customModel, setCustomModel] = useState('')
+  const provider = snapshot.providers.find(item => item.id === id)
+  const settings = snapshot.settings.quotaWake[id]
+  const plan = snapshot.wakePlans[id]
+  const models = provider?.models ?? (id === 'claude-code' ? [{ id: 'haiku', name: 'Haiku · 轻量' }, { id: 'sonnet', name: 'Sonnet' }, { id: 'opus', name: 'Opus' }] : [])
+  const threads = snapshot.threads.filter(thread => (thread.provider ?? 'codex') === id)
+  const update = (patch: Partial<QuotaWakeSettings>): void => { void onUpdate({ quotaWake: { ...snapshot.settings.quotaWake, [id]: { ...settings, ...patch } } }) }
+  return <section className="wake-settings" aria-labelledby="wake-title">
+    <div className="wake-heading"><span><Clock3 size={17} /><strong id="wake-title">额度唤醒</strong></span><span className="new-pill">NEW</span></div>
+    <p className="wake-intro">无需任务中断。五小时窗口刷新后，递上一句轻轻的“收到”。</p>
+    <div className="wake-provider-tabs" aria-label="唤醒应用">{snapshot.providers.map(item => <button key={item.id} aria-pressed={id === item.id} onClick={() => setId(item.id)}>{item.name}</button>)}</div>
+    <label className="setting-row wake-enable"><div><strong>开启 {provider?.name} 唤醒</strong><span>独立于自动接力，默认关闭</span></div><input type="checkbox" checked={settings.enabled} onChange={event => update({ enabled: event.target.checked })} /></label>
+    <label className="field"><span>发送到哪里</span><select aria-label="唤醒目标" value={settings.target} onChange={event => update({ target: event.target.value as 'new' | 'existing' })}><option value="new">每次新开专用对话 · 更省上下文</option><option value="existing">选择已有对话</option></select></label>
+    {settings.target === 'existing' && <label className="field"><span>选择对话</span><select aria-label="唤醒对话" value={settings.threadId} onChange={event => update({ threadId: event.target.value })}><option value="">请选择空闲对话</option>{settings.threadId && !threads.some(thread => thread.id === settings.threadId) && <option value={settings.threadId}>已保存的对话 · 等待同步</option>}{threads.map(thread => <option key={thread.id} value={thread.id}>{thread.name || thread.preview || '未命名对话'}</option>)}</select><small>只向空闲对话发送。会新增一轮消息，并可能切换该对话后续使用的模型。</small></label>}
+    <label className="field"><span>唤醒模型</span><select aria-label="唤醒模型" value={settings.model} onChange={event => update({ model: event.target.value })}><option value="auto">自动 · 优先轻量模型</option>{models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}{settings.model !== 'auto' && !models.some(model => model.id === settings.model) && <option value={settings.model}>{settings.model} · 待确认可用</option>}</select><small>{id === 'codex' ? '从本机模型列表优先选择 Luna 轻量模型；找不到时等待选择，不自动升档。' : '默认使用 Haiku；可选别名或下方填写完整模型 ID，实际权限以客户端为准。'}</small></label>
+    {id === 'claude-code' && <label className="field"><span>自定义模型（可选）</span><div className="input-with-action"><input aria-label="自定义唤醒模型" value={customModel} onChange={event => setCustomModel(event.target.value)} placeholder="例如：haiku 或完整模型 ID" /><button onClick={() => customModel.trim() && update({ model: customModel.trim() })}>应用</button></div></label>}
+    <div className="wake-prompt"><span>固定唤醒口令</span><code>{WAKE_PROMPT}</code></div>
+    <p className="wake-status-line" role="status">{!settings.enabled ? '尚未开启，不会自动创建对话或发送消息。' : plan ? `${plan.message}${plan.status === 'waiting' ? ` · ${formatDate(plan.scheduledFor)}` : ''}` : '等待已知的五小时刷新时间。'}</p>
+    <p className="wake-notice">开启即允许按计划发消息，会消耗少量用量。每窗口最多尝试一次；正在工作、周额度阻塞或缺少刷新时间时等待。不同模型可能使用不同计量桶，不能保证“锁定”五小时窗口；计时与额度以官方规则为准。</p>
+  </section>
 }
 
 function formatDate(value: number): string {

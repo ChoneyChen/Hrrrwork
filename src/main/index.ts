@@ -29,7 +29,8 @@ app.whenReady().then(async () => {
     (title, body) => {
       if (Notification.isSupported()) new Notification({ title, body }).show()
     },
-    new ClaudeCode(bridgeScript)
+    new ClaudeCode(bridgeScript),
+    path.join(app.getPath('userData'), 'wake')
   )
 
   createWindow()
@@ -115,7 +116,7 @@ function createTray(): void {
 function updateTray(snapshot: RelaySnapshot): void {
   if (!tray) return
   const waiting = snapshot.queue.length
-  const state = snapshot.settings.enabled ? '巡夜中' : '已暂停'
+  const state = snapshot.settings.enabled ? '巡夜中' : Object.values(snapshot.settings.quotaWake).some(setting => setting.enabled) ? '接力暂停 · 唤醒开启' : '已暂停'
   tray.setToolTip(`Hrrrwork · ${state}${waiting ? ` · ${waiting} 个待接力` : ''}`)
 }
 

@@ -33,6 +33,7 @@ process.stdin.on('end', () => {
       status,
       failedAt: event === 'StopFailure' && data.error === 'rate_limit' ? now : event === 'UserPromptSubmit' ? null : previous.failedAt || null,
       updatedAt: now,
+      quotaUpdatedAt: data.rate_limits ? now : previous.quotaUpdatedAt || previous.updatedAt || now,
       rateLimits: data.rate_limits || previous.rateLimits || null
     }
     const temporary = `${file}.${process.pid}.tmp`

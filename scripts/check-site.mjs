@@ -20,7 +20,7 @@ app.whenReady().then(async () => {
         }
         return selected;
       })()`)
-      if (commands.length !== 3 || commands.some(item => item.selected !== 'true' || !item.command.includes('v1.0.0'))) throw new Error('Download commands did not switch correctly')
+      if (commands.length !== 3 || commands.some(item => item.selected !== 'true' || !item.command.includes('v1.1.0'))) throw new Error('Download commands did not switch correctly')
       const report = await window.webContents.executeJavaScript(`({
         title: document.title,
         viewport: innerWidth,
@@ -36,6 +36,9 @@ app.whenReady().then(async () => {
       await window.webContents.executeJavaScript(`document.getElementById('command-line').scrollIntoView({ block: 'center', behavior: 'instant' })`)
       await new Promise(resolve => setTimeout(resolve, 50))
       await writeFile(path.join(os.tmpdir(), `hrrrwork-command-${label}.png`), (await window.webContents.capturePage()).toPNG())
+      await window.webContents.executeJavaScript(`document.getElementById('wake').scrollIntoView({ block: 'start', behavior: 'instant' })`)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      await writeFile(path.join(os.tmpdir(), `hrrrwork-wake-${label}.png`), (await window.webContents.capturePage()).toPNG())
       console.log(JSON.stringify({ label, ...report }))
       window.destroy()
     }

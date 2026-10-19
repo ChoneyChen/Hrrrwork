@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f5f0e7" />
-    <meta name="description" content="Hrrrwork，为 Codex 和 Claude Code 值夜班。自动检测应用，等待 5 小时或周额度刷新，接力中断任务。支持 macOS、Windows 和 Linux。" />
+    <meta name="description" content="Hrrrwork，为 Codex 和 Claude Code 值夜班。额度中断时接力，五小时刷新后可选轻量唤醒。支持 macOS、Windows 和 Linux。" />
     <meta property="og:title" content="Hrrrwork · 你去睡，任务别停。" />
     <meta property="og:description" content="把晚安留给自己，把接力交给 Hrrrwork。macOS / Windows / Linux。" />
     <meta property="og:image" content="https://choneychen.github.io/Hrrrwork/dashboard.png" />
@@ -21,6 +21,7 @@
       <a class="wordmark" href="#" aria-label="Hrrrwork 首页"><img src="icon.svg" alt="" width="40" height="40" /><span>Hrrrwork</span></a>
       <nav aria-label="主导航">
         <a href="#how">怎样接力</a>
+        <a href="#wake">额度唤醒</a>
         <a href="https://github.com/ChoneyChen/Hrrrwork" target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span></a>
         <a class="nav-download" href="#download">下载应用 <span aria-hidden="true">↓</span></a>
       </nav>
@@ -28,10 +29,10 @@
     <main id="main">
       <section class="hero wrap">
         <div class="hero-copy">
-          <a class="release-pill" href="https://github.com/ChoneyChen/Hrrrwork/releases/tag/v1.0.0"><i></i> Hrrrwork v1.0.0 <span>现已上线 ↗</span></a>
+          <a class="release-pill" href="https://github.com/ChoneyChen/Hrrrwork/releases/tag/v1.1.0"><i></i> Hrrrwork v1.1.0 <span>现已上线 ↗</span></a>
           <p class="eyebrow">GOOD NIGHT. GOOD WORK.</p>
           <h1>你去睡，<br />任务<span class="coral">别停。</span></h1>
-          <p class="hero-description">把晚安留给自己，把接力交给 Hrrrwork。<br class="desktop-break" />Codex 或 Claude Code 额度用完了？<br />等它刷新，我来递上 <code>continue</code>。</p>
+          <p class="hero-description">把晚安留给自己，把接力交给 Hrrrwork。<br class="desktop-break" />Codex / Claude Code，中断时接力，<br />空闲时，也能在刷新后轻轻唤醒。</p>
           <div class="hero-actions"><a class="button primary" href="#download">开始今晚的接力 <span aria-hidden="true">↓</span></a><a class="text-link" href="#preview">看看它的样子 <span aria-hidden="true">↘</span></a></div>
           <p class="platform-note">macOS · Windows · Linux <b>／</b> 免费开源，本地运行</p>
         </div>
@@ -49,7 +50,15 @@
       <section class="preview wrap" id="preview" aria-labelledby="preview-title">
         <div class="section-heading"><div><p class="eyebrow">A QUIET LITTLE COMPANION</p><h2 id="preview-title">一眼看清，安心交班。</h2></div><p>额度、任务与接力进度，<br />都在这个小小的窗口里。</p></div>
         <div class="app-preview"><div class="window-bar"><span class="window-dots"><i></i><i></i><i></i></span><span>Hrrrwork · 睡眠接力</span><span class="preview-label">界面示例</span></div><img src="dashboard.png" alt="Hrrrwork 桌面界面：额度进度、最近任务、接力篮和自动接力开关" width="1120" height="760" loading="lazy" /></div>
-        <div class="benefits"><p><span>✦</span> Codex + Claude Code</p><p><span>✦</span> 原任务继续接力</p><p><span>✦</span> 手动继续后自动避让</p><p><span>✦</span> 托盘里安静守候</p></div>
+        <div class="benefits"><p><span>✦</span> Codex + Claude Code</p><p><span>✦</span> 原任务继续接力</p><p><span>✦</span> 可选轻量额度唤醒</p><p><span>✦</span> 托盘里安静守候</p></div>
+      </section>
+
+      <section class="wake-section wrap" id="wake" aria-labelledby="wake-title">
+        <div class="section-heading"><div><p class="eyebrow">A SOFT HELLO. RIGHT ON TIME.</p><h2 id="wake-title">不等掉棒，也能轻轻唤醒。</h2></div><p>v1.1 新增 · 可选开启<br />五小时刷新后，一句简短的问候。</p></div>
+        <div class="wake-feature">
+          <div class="wake-conversation"><span class="wake-kicker">QUOTA WAKE · OPTIONAL</span><div class="wake-schedule"><i></i> 等待官方刷新时间 + 安全缓冲</div><div class="wake-bubble user">唤醒，仅需回复收到</div><div class="wake-bubble reply"><span>☾</span> 收到</div><span class="wake-footnote">一轮轻量唤醒，不开启额外工作。</span></div>
+          <div class="wake-feature-copy"><h3>没有中断，也可以准时说声“在”。</h3><p>即使额度尚未用完，也可按已知五小时刷新时间发起一轮简短对话。它与中断接力分开设置，各自安静值班。</p><ul><li>默认新开专用对话，也可指定已有空闲对话</li><li>优先轻量模型，支持自行选择；不可用时不自动升档</li><li>每窗口最多尝试一次，正在工作时自动避让</li></ul><a class="text-link" href="https://github.com/ChoneyChen/Hrrrwork#额度唤醒">看看怎样开启 <span aria-hidden="true">↗</span></a></div>
+        </div><p class="wake-boundary">默认关闭，开启后会消耗少量用量。Codex 自动优先可用的 Luna 轻量模型；Claude Code 默认 Haiku。实际起算、模型权限和额度由服务方决定，不保证“锁定”五小时窗口。缺少刷新时间时等待同步。</p>
       </section>
 
       <section class="how-section" id="how">
@@ -61,19 +70,21 @@
       <section class="download-section wrap" id="download" aria-labelledby="download-title">
         <p class="eyebrow">READY WHEN YOU ARE</p><h2 id="download-title">今晚，让 Hrrrwork 值班。</h2><p class="download-description">选好你的系统，下载、打开，开启自动接力。</p>
         <div class="downloads">
-          <article class="download-card"><span class="os-icon" aria-hidden="true">⌘</span><span class="os-detail">Apple Silicon + Intel</span><h3>macOS</h3><p>一个 Universal 版本，适配两种 Mac。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-mac-universal.dmg">下载 DMG <span aria-hidden="true">↓</span></a><a class="secondary-download" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-mac-universal.zip">或下载 ZIP ↗</a></article>
-          <article class="download-card"><span class="os-icon windows-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="os-detail">64-bit</span><h3>Windows</h3><p>轻巧的便携版，打开即可开始巡夜。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-win-x64.exe">下载 EXE <span aria-hidden="true">↓</span></a><span class="secondary-download">Portable · x64</span></article>
-          <article class="download-card"><span class="os-icon" aria-hidden="true">&gt;_</span><span class="os-detail">64-bit</span><h3>Linux</h3><p>AppImage 直接运行，或选择 DEB 安装。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-linux-x86_64.AppImage">下载 AppImage <span aria-hidden="true">↓</span></a><a class="secondary-download" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-linux-amd64.deb">或下载 DEB ↗</a></article>
+          <article class="download-card"><span class="os-icon" aria-hidden="true">⌘</span><span class="os-detail">Apple Silicon + Intel</span><h3>macOS</h3><p>一个 Universal 版本，适配两种 Mac。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-mac-universal.dmg">下载 DMG <span aria-hidden="true">↓</span></a><a class="secondary-download" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-mac-universal.zip">或下载 ZIP ↗</a></article>
+          <article class="download-card"><span class="os-icon windows-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="os-detail">64-bit</span><h3>Windows</h3><p>轻巧的便携版，打开即可开始巡夜。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-win-x64.exe">下载 EXE <span aria-hidden="true">↓</span></a><span class="secondary-download">Portable · x64</span></article>
+          <article class="download-card"><span class="os-icon" aria-hidden="true">&gt;_</span><span class="os-detail">64-bit</span><h3>Linux</h3><p>AppImage 直接运行，或选择 DEB 安装。</p><a class="button primary" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-linux-x86_64.AppImage">下载 AppImage <span aria-hidden="true">↓</span></a><a class="secondary-download" href="https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-linux-amd64.deb">或下载 DEB ↗</a></article>
         </div>
-        <p class="version-note">v1.0.0 <span>·</span> <a href="https://github.com/ChoneyChen/Hrrrwork/releases">查看版本记录 ↗</a></p>
+        <p class="version-note">v1.1.0 <span>·</span> <a href="https://github.com/ChoneyChen/Hrrrwork/releases">查看版本记录 ↗</a></p>
         <div class="terminal-download" id="command-line">
           <div class="terminal-heading"><div><span class="terminal-label">&gt;_ TERMINAL</span><h3>也可以，从命令行开始。</h3></div><div class="command-tabs" role="tablist" aria-label="下载命令的系统"><button type="button" role="tab" id="tab-mac" aria-controls="command-panel" aria-selected="true" data-os="mac">macOS</button><button type="button" role="tab" id="tab-win" aria-controls="command-panel" aria-selected="false" data-os="win">Windows</button><button type="button" role="tab" id="tab-linux" aria-controls="command-panel" aria-selected="false" data-os="linux">Linux</button></div></div>
-          <div class="command-block" id="command-panel" role="tabpanel" aria-labelledby="tab-mac"><pre><code id="download-command">curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/Hrrrwork-1.0.0-mac-universal.dmg' -o Hrrrwork.dmg</code></pre><button type="button" id="copy-command">复制命令</button></div><p class="command-hint" id="command-hint">下载到当前目录，打开 DMG 后将 Hrrrwork 拖入“应用程序”。</p><span class="sr-only" id="copy-status" aria-live="polite"></span>
+          <div class="command-block" id="command-panel" role="tabpanel" aria-labelledby="tab-mac"><pre><code id="download-command">curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/Hrrrwork-1.1.0-mac-universal.dmg' -o Hrrrwork.dmg</code></pre><button type="button" id="copy-command">复制命令</button></div><p class="command-hint" id="command-hint">下载到当前目录，打开 DMG 后将 Hrrrwork 拖入“应用程序”。</p><span class="sr-only" id="copy-status" aria-live="polite"></span>
         </div>
       </section>
 
       <section class="faq wrap" aria-labelledby="faq-title"><h2 id="faq-title">交班之前，<br />你可能想知道。</h2><div class="faq-list">
-        <details open><summary>支持哪些编码助手？<span>+</span></summary><p>v1.0 支持 Codex 和 Claude Code。Hrrrwork 自动检测已安装的应用，分别展示额度与任务。先安装并登录你使用的编码助手，也可在设置中指定可执行文件路径。</p></details>
+        <details open><summary>支持哪些编码助手？<span>+</span></summary><p>v1.1 支持 Codex 和 Claude Code。Hrrrwork 自动检测已安装的应用，分别展示额度与任务。先安装并登录你使用的编码助手，也可在设置中指定可执行文件路径。</p></details>
+        <details><summary>额度没用完，也能自动唤醒吗？<span>+</span></summary><p>可以。在“设置 → 额度唤醒”中按应用开启，默认新开专用对话，也可选择已有空闲对话及模型。无需任务中断或用量达到 100%，到已知五小时刷新时间加缓冲后，发送“唤醒，仅需回复收到”。</p></details>
+        <details><summary>能保证锁定五小时窗口、完全免费吗？<span>+</span></summary><p>不能保证。唤醒是一轮真实请求，会消耗少量用量；不同模型可能使用不同计量桶，窗口起算和模型费用由服务方决定。已有新窗口用量时跳过多余唤醒，周额度阻塞时等待；缺少官方刷新时间时不猜测或循环发消息。</p></details>
         <details><summary>Claude Code 怎样连接？<span>+</span></summary><p>选择 Claude Code，点击“连接 Claude Code”。Hrrrwork 会配置本地状态栏与事件桥接，保留已有状态栏；下一轮会话开始后同步额度。只接力明确的额度错误，缺少刷新时间时等待数据；断开后恢复原状态栏。</p></details>
         <details><summary>电脑可以一起睡觉吗？<span>+</span></summary><p>自动接力需要电脑保持开机、联网，并让 Hrrrwork 在后台运行。关掉主窗口后，它仍会驻留系统托盘；电脑休眠期间无法执行任务，唤醒后会继续检查。</p></details>
         <details><summary>会不会重复发送 continue？<span>+</span></summary><p>发送前会再次检查原任务的中断轮次。如果你已经手动继续，或任务已有新的进展，Hrrrwork 会取消队列中的这次接力。</p></details>

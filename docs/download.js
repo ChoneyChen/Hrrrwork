@@ -1,8 +1,8 @@
-const base = 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.0.0/'
+const base = 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.1.0/'
 const downloads = {
-  mac: { command: `curl -fL '${base}Hrrrwork-1.0.0-mac-universal.dmg' -o Hrrrwork.dmg`, hint: '下载到当前目录，打开 DMG 后将 Hrrrwork 拖入“应用程序”。' },
-  win: { command: `Invoke-WebRequest -Uri '${base}Hrrrwork-1.0.0-win-x64.exe' -OutFile Hrrrwork.exe`, hint: '在 PowerShell 中运行，下载后双击 Hrrrwork.exe 即可。' },
-  linux: { command: `curl -fL '${base}Hrrrwork-1.0.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage\nchmod +x Hrrrwork.AppImage`, hint: '下载到当前目录，随后运行 ./Hrrrwork.AppImage。' }
+  mac: { command: `curl -fL '${base}Hrrrwork-1.1.0-mac-universal.dmg' -o Hrrrwork.dmg`, hint: '下载到当前目录，打开 DMG 后将 Hrrrwork 拖入“应用程序”。' },
+  win: { command: `Invoke-WebRequest -Uri '${base}Hrrrwork-1.1.0-win-x64.exe' -OutFile Hrrrwork.exe`, hint: '在 PowerShell 中运行，下载后双击 Hrrrwork.exe 即可。' },
+  linux: { command: `curl -fL '${base}Hrrrwork-1.1.0-linux-x86_64.AppImage' -o Hrrrwork.AppImage\nchmod +x Hrrrwork.AppImage`, hint: '下载到当前目录，随后运行 ./Hrrrwork.AppImage。' }
 }
 const code = document.getElementById('download-command')
 const hint = document.getElementById('command-hint')
