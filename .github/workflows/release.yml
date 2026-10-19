@@ -29,6 +29,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
+      - name: Verify update selection, downloads and integrity on this platform
+        run: npx vitest run src/main/updates/UpdateManager.test.ts
       - run: npm run ${{ matrix.command }}
       - uses: actions/upload-artifact@v7
         with:
