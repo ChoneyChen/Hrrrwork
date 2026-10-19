@@ -11,6 +11,7 @@ export interface UpdateState {
   progress?: number
   downloadedBytes?: number
   totalBytes?: number
+  canDownload?: boolean
 }
 
 export interface WakeModel {

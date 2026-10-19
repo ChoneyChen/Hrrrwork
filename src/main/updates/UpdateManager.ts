@@ -124,11 +124,11 @@ export class UpdateManager extends EventEmitter {
       const latestVersion = release.tag_name.replace(/^v/, '')
       if (!newerVersion(latestVersion, this.options.version)) {
         this.asset = null; this.readyPath = null
-        this.publish({ status: 'current', latestVersion, checkedAt: Date.now(), progress: undefined, message: '已是最新版本，安心巡夜。' })
+        this.publish({ status: 'current', latestVersion, canDownload: false, checkedAt: Date.now(), progress: undefined, message: '已是最新版本，安心巡夜。' })
       } else {
         const asset = selectAsset(release, this.options)
         this.asset = asset
-        this.publish({ status: asset ? 'available' : 'unsupported', latestVersion, checkedAt: Date.now(), progress: undefined,
+        this.publish({ status: asset ? 'available' : 'unsupported', latestVersion, canDownload: !!asset, checkedAt: Date.now(), progress: undefined,
           message: asset ? `发现 v${latestVersion}，可以下载更新。` : '此平台或架构暂无对应安装包，请到官网查看。' })
         if (asset) {
           const destination = path.join(this.options.directory, asset.name)
@@ -147,6 +147,8 @@ export class UpdateManager extends EventEmitter {
 
   download(automatic = false): Promise<UpdateState> {
     if (this.downloading) return this.downloading
+    if (this.checking && !automatic) return this.checking.then(() => this.download())
+    if (this.state.status === 'ready') return Promise.resolve(this.snapshot())
     if (!this.asset || this.stopped) return Promise.resolve(this.snapshot())
     this.automaticDownload = automatic
     this.downloading = this.downloadOnce(this.asset).finally(() => { this.downloading = null; this.automaticDownload = false })

@@ -384,7 +384,7 @@ function SettingsDrawer({ settings, snapshot, selectedProvider, codexPath, claud
           <p className="update-status" role="status">{update.message}</p>
           {update.status === 'downloading' && <div className="update-progress"><progress aria-label="更新下载进度" max={100} value={update.progress ?? 0} /><span>{update.progress ?? 0}% · {Math.round((update.downloadedBytes ?? 0) / 1048576)} / {Math.round((update.totalBytes ?? 0) / 1048576)} MB</span></div>}
           <div className="update-actions"><button disabled={['checking', 'downloading'].includes(update.status)} onClick={() => void onUpdateAction('check')}>{update.status === 'checking' ? '正在检查…' : '检查更新'}</button>
-            {update.latestVersion && ['available', 'error'].includes(update.status) && <button onClick={() => void onUpdateAction('download')}>下载 v{update.latestVersion}</button>}
+            {update.canDownload && update.latestVersion && ['available', 'error'].includes(update.status) && <button onClick={() => void onUpdateAction('download')}>下载 v{update.latestVersion}</button>}
             {update.status === 'ready' && <button className="primary" onClick={() => void onUpdateAction('reveal')}>查看更新包</button>}
           </div>
           <small>仅从 Hrrrwork 官方 GitHub 发布下载，核验 SHA-256。不会静默覆盖正在运行的应用。安装前先从托盘退出；macOS 拖入应用程序，Windows 打开新版 EXE，Ubuntu 安装 DEB，AppImage 替换后设为可执行。</small>

@@ -99,6 +99,25 @@ describe('update download', () => {
     expect((await updater.check()).status).toBe('error')
     expect((await updater.check()).status).toBe('available')
   })
+  it('keeps an already verified installer usable when the next online check fails', async () => {
+    const { updater, fetcher } = await manager()
+    await updater.check(); await updater.download()
+    fetcher.mockRejectedValueOnce(new Error('offline'))
+    expect((await updater.check()).status).toBe('ready')
+    expect(await updater.installerPath()).toContain('1.3.0')
+  })
+  it('cancels automatic downloads when their setting is disabled', async () => {
+    const { updater, fetcher, directory } = await manager()
+    fetcher.mockImplementation(async (url, init?: RequestInit) => {
+      if (String(url).includes('api.github.com')) return Response.json(release())
+      if (init?.signal?.aborted) throw new Error('aborted')
+      return new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true }))
+    })
+    updater.configure({ autoCheck: false, autoDownload: true })
+    updater.on('state', state => { if (state.status === 'downloading') updater.configure({ autoCheck: false, autoDownload: false }) })
+    expect((await updater.check()).status).toBe('available')
+    expect(await fs.readdir(directory)).toEqual([])
+  })
   it('starts checking after 12s and repeats every six hours; switch off cancels the timer', async () => {
     const { directory, fetcher } = await manager()
     vi.useFakeTimers()

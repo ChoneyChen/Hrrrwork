@@ -29,10 +29,13 @@ app.whenReady().then(async () => {
       const settings = await window.webContents.executeJavaScript(`(() => {
         const drawer = document.querySelector('.settings-drawer');
         const bounds = drawer.getBoundingClientRect();
-        return { width: drawer.clientWidth, content: drawer.scrollWidth, top: bounds.top, bottom: bounds.bottom, wake: !!document.getElementById('wake-title'), target: document.querySelector('[aria-label="唤醒目标"]').value };
+        return { width: drawer.clientWidth, content: drawer.scrollWidth, top: bounds.top, bottom: bounds.bottom, updates: !!document.getElementById('update-title'), wake: !!document.getElementById('wake-title'), target: document.querySelector('[aria-label="唤醒目标"]').value };
       })()`)
-      if (!settings.wake || settings.content > settings.width || settings.top < 0 || settings.bottom > height || settings.target !== 'new') throw new Error(JSON.stringify(settings))
+      if (!settings.updates || !settings.wake || settings.content > settings.width || settings.top < 0 || settings.bottom > height || settings.target !== 'new') throw new Error(JSON.stringify(settings))
       await writeFile(path.join(os.tmpdir(), `hrrrwork-settings-${width}-${height}.png`), (await window.webContents.capturePage()).toPNG())
+      await window.webContents.executeJavaScript(`document.querySelector('.update-actions button').click()`)
+      await new Promise(resolve => setTimeout(resolve, 50))
+      if (!await window.webContents.executeJavaScript(`document.querySelector('.update-status').textContent.includes('最新版本')`)) throw new Error('Update settings did not respond')
       await window.webContents.executeJavaScript(`document.querySelector('[aria-label="唤醒目标"]').value = 'existing'; document.querySelector('[aria-label="唤醒目标"]').dispatchEvent(new Event('change', {bubbles:true}));`)
       await new Promise(resolve => setTimeout(resolve, 50))
       if (!await window.webContents.executeJavaScript(`!!document.querySelector('[aria-label="唤醒对话"]')`)) throw new Error('Existing conversation selector did not open')
