@@ -31,8 +31,14 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - name: Verify update selection, downloads and integrity on this platform
-        run: npx vitest run src/main/updates/UpdateManager.test.ts
+        run: npx vitest run src/main/updates src/shared/wakeSchedule.test.ts src/renderer/src/QuotaCard.test.tsx
       - run: npm run ${{ matrix.command }}
+      - name: Check lean application payload
+        run: node scripts/check-package.mjs
+      - name: Verify Windows install and restart handoff
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/check-windows-install.ps1
       - uses: actions/upload-artifact@v7
         with:
           name: Hrrrwork-${{ runner.os }}
