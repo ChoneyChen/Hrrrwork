@@ -29,6 +29,16 @@ function fixture(resetOffset = 300, wakeDirectory?: string) {
 }
 
 describe('multi-provider relay safety', () => {
+  it('rejects a first wake before the official reset and accepts the reset itself', async () => {
+    const { engine } = fixture()
+    const reset = Date.now() + 1800000
+    engine['quota'] = { rateLimits: { limitId: 'codex', primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: reset / 1000 } } }
+    const settings = { ...engine.snapshot().settings.quotaWake.codex, timing: 'daily' as const, firstWakeAt: reset - 60000 }
+    await expect(engine.updateSettings({ quotaWake: { ...engine.snapshot().settings.quotaWake, codex: settings } })).rejects.toThrow('不能早于')
+    expect(engine.snapshot().settings.quotaWake.codex.timing).toBe('reset')
+    await engine.updateSettings({ quotaWake: { ...engine.snapshot().settings.quotaWake, codex: { ...settings, firstWakeAt: reset } } })
+    expect(engine.snapshot().settings.quotaWake.codex.firstWakeAt).toBe(reset)
+  })
   it('shows Codex tasks even when the quota endpoint fails and does not send without quota', async () => {
     const { engine } = fixture()
     engine['connection'] = 'connected'

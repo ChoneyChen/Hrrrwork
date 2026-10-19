@@ -25,6 +25,8 @@ export interface QuotaWakeSettings {
   target: 'new' | 'existing'
   threadId: string
   model: string
+  timing?: 'reset' | 'daily'
+  firstWakeAt?: number
 }
 
 export interface WakePlan {
@@ -36,12 +38,14 @@ export interface WakePlan {
   turnId?: string
   model?: string
   sentAt?: number
+  scheduleKey?: string
+  slotAt?: number
 }
 
 export const WAKE_PROMPT = '唤醒，仅需回复收到'
 export const DEFAULT_QUOTA_WAKE: Record<ProviderId, QuotaWakeSettings> = {
-  codex: { enabled: false, target: 'new', threadId: '', model: 'auto' },
-  'claude-code': { enabled: false, target: 'new', threadId: '', model: 'auto' }
+  codex: { enabled: false, target: 'new', threadId: '', model: 'auto', timing: 'reset', firstWakeAt: 0 },
+  'claude-code': { enabled: false, target: 'new', threadId: '', model: 'auto', timing: 'reset', firstWakeAt: 0 }
 }
 
 export interface ProviderSnapshot {
@@ -155,6 +159,7 @@ export interface HrrrworkApi {
   checkForUpdates: () => Promise<UpdateState>
   downloadUpdate: () => Promise<UpdateState>
   revealUpdate: () => Promise<void>
+  installUpdate: () => Promise<void>
   onUpdateState: (listener: (state: UpdateState) => void) => () => void
   getSnapshot: () => Promise<RelaySnapshot>
   refresh: () => Promise<RelaySnapshot>

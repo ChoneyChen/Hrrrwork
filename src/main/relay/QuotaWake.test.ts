@@ -18,6 +18,33 @@ function fixture() {
 }
 
 describe('quota wake scheduling', () => {
+  it('waits for the optional first time and does not send before the official refresh', async () => {
+    const f = fixture()
+    Object.assign(f.state.settings.quotaWake.codex, { timing: 'daily', firstWakeAt: now + 600000 })
+    await f.check(now + 300000)
+    expect(f.state.wakePlans.codex?.scheduledFor).toBe(now + 600000)
+    expect(f.send).not.toHaveBeenCalled()
+    await f.check(now + 600000)
+    expect(f.send).toHaveBeenCalledTimes(1)
+  })
+  it('postpones a scheduled wake if normal work moves the next official reset later', async () => {
+    const f = fixture()
+    Object.assign(f.state.settings.quotaWake.codex, { timing: 'daily', firstWakeAt: now + 600000 })
+    await f.check()
+    f.provider.quota!.rateLimits!.primary!.resetsAt += 18000
+    await f.check(now + 600000)
+    expect(f.send).not.toHaveBeenCalled()
+    expect(f.state.wakePlans.codex!.scheduledFor).toBe(now + 18300000)
+  })
+  it('does not override the chosen daily anchor on repeated checks or restart', async () => {
+    const f = fixture()
+    Object.assign(f.state.settings.quotaWake.codex, { timing: 'daily', firstWakeAt: now + 600000 })
+    await f.check()
+    await new QuotaWake().check(f.provider, structuredClone(f.state), f.save, f.event, now + 599999)
+    expect(f.send).not.toHaveBeenCalled()
+    await f.check(now + 600000); await f.check(now + 610000)
+    expect(f.send).toHaveBeenCalledTimes(1)
+  })
   it('is disabled for both providers on new and upgraded installations', async () => {
     expect(Object.values(DEFAULT_SETTINGS.quotaWake).every(settings => !settings.enabled)).toBe(true)
     const f = fixture(); f.state.settings.quotaWake.codex.enabled = false

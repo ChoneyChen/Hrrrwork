@@ -6,6 +6,7 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
       rollupOptions: {
         input: resolve('src/main/index.ts')
       }
@@ -14,6 +15,7 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
       rollupOptions: {
         input: resolve('src/preload/index.ts'),
         output: {
@@ -25,6 +27,7 @@ export default defineConfig({
   },
   renderer: {
     root: resolve('src/renderer'),
+    build: { minify: true },
     plugins: [react()]
   }
 })

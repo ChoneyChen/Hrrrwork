@@ -25,6 +25,12 @@ async function manager(body = bytes, metadata = release()) {
 }
 
 describe('release selection', () => {
+  it('prefers a smaller native Mac package while retaining Universal compatibility', () => {
+    const value = release()
+    value.assets.push({ ...value.assets[0], name: 'Hrrrwork-1.3.0-mac-arm64.dmg', browser_download_url: 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v1.3.0/Hrrrwork-1.3.0-mac-arm64.dmg' })
+    expect(selectAsset(value, { platform: 'darwin', arch: 'arm64' })?.name).toContain('mac-arm64')
+    expect(selectAsset(value, { platform: 'darwin', arch: 'x64' })?.name).toContain('mac-universal')
+  })
   it('compares numeric stable versions only', () => {
     expect(newerVersion('v1.10.0', '1.9.2')).toBe(true)
     for (const version of ['1.2.0', '1.1.9', '1.3.0-beta', '../../1.3.0', 'latest']) expect(newerVersion(version, '1.2.0')).toBe(false)

@@ -18,5 +18,8 @@ app.whenReady().then(async () => {
   const image = await window.webContents.capturePage()
   await mkdir(path.join(root, 'docs'), { recursive: true })
   await writeFile(path.join(root, 'docs', 'dashboard.png'), image.toPNG())
+  await window.loadFile(path.join(root, 'out/renderer/index.html'), { query: { capture: '1', wake: '1', daily: '1' } })
+  await new Promise(resolve => setTimeout(resolve, 250))
+  await writeFile(path.join(root, 'docs', 'wake.png'), (await window.webContents.capturePage()).toPNG())
   app.quit()
 })

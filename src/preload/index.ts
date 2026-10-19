@@ -6,6 +6,7 @@ const api: HrrrworkApi = {
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   downloadUpdate: () => ipcRenderer.invoke('updates:download'),
   revealUpdate: () => ipcRenderer.invoke('updates:reveal'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
   onUpdateState: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: UpdateState): void => listener(state)
     ipcRenderer.on('updates:state', handler)

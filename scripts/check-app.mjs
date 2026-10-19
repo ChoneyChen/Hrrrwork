@@ -3,46 +3,37 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 app.on('window-all-closed', () => {})
+const pause = () => new Promise(resolve => setTimeout(resolve, 80))
 app.whenReady().then(async () => {
   try {
     for (const [width, height] of [[1180, 800], [960, 640], [960, 680], [1600, 1000]]) {
       const window = new BrowserWindow({ width, height, useContentSize: true, show: false, webPreferences: { offscreen: true } })
+      const js = code => window.webContents.executeJavaScript(code)
       await window.loadFile(path.join(root, 'out/renderer/index.html'), { query: { capture: '1' } })
-      await new Promise(resolve => setTimeout(resolve, 150))
-      const report = await window.webContents.executeJavaScript(`(() => {
-        window.scrollTo(0, 500);
-        const box = document.querySelector('.app-shell').getBoundingClientRect();
-        const panels = [...document.querySelectorAll('.dashboard-grid > *')].map(node => { const r = node.getBoundingClientRect(); return { bottom: r.bottom, right: r.right }; });
-        const clippedQuotas = [...document.querySelectorAll('.quota-card')].filter(card => card.querySelector('.quota-footer').getBoundingClientRect().bottom > card.getBoundingClientRect().bottom - 4).length;
-        const quota = [...document.querySelectorAll('.quota-card')].map(card => ({ label: card.querySelector('.quota-heading strong').textContent, remaining: Number(card.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')), width: card.querySelector('.meter i').style.width }));
-        document.querySelectorAll('.provider-tab')[1].click();
-        return { viewport: [innerWidth, innerHeight], scroll: [scrollX, scrollY], documentSize: [document.documentElement.scrollWidth, document.documentElement.scrollHeight], box: [box.width, box.height], panels, clippedQuotas, quota };
-      })()`)
-      if (report.clippedQuotas || report.scroll.some(v => v !== 0) || report.documentSize[0] > width || report.documentSize[1] > height || report.panels.some(p => p.bottom > height || p.right > width)) throw new Error(JSON.stringify(report))
-      if (JSON.stringify(report.quota.map(q => [q.label, q.remaining, q.width])) !== JSON.stringify([['剩余68%', 68, '68%'], ['剩余66%', 66, '66%']])) throw new Error('Quota display must show remaining allowance: ' + JSON.stringify(report.quota))
-      console.log(JSON.stringify(report))
-      await new Promise(resolve => setTimeout(resolve, 50))
-      const claudeQuota = await window.webContents.executeJavaScript(`[...document.querySelectorAll('.quota-card [role="progressbar"]')].map(node => Number(node.getAttribute('aria-valuenow')))`)
-      if (JSON.stringify(claudeQuota) !== JSON.stringify([36, 78])) throw new Error('Claude quota must also show remaining allowance')
-      await writeFile(path.join(os.tmpdir(), `hrrrwork-app-${width}-${height}.png`), (await window.webContents.capturePage()).toPNG())
-      await window.webContents.executeJavaScript(`document.querySelector('[aria-label="设置"]').click()`)
-      await new Promise(resolve => setTimeout(resolve, 300))
-      const settings = await window.webContents.executeJavaScript(`(() => {
-        const drawer = document.querySelector('.settings-drawer');
-        const bounds = drawer.getBoundingClientRect();
-        return { width: drawer.clientWidth, content: drawer.scrollWidth, top: bounds.top, bottom: bounds.bottom, updates: !!document.getElementById('update-title'), wake: !!document.getElementById('wake-title'), target: document.querySelector('[aria-label="唤醒目标"]').value };
-      })()`)
-      if (!settings.updates || !settings.wake || settings.content > settings.width || settings.top < 0 || settings.bottom > height || settings.target !== 'new') throw new Error(JSON.stringify(settings))
-      await writeFile(path.join(os.tmpdir(), `hrrrwork-settings-${width}-${height}.png`), (await window.webContents.capturePage()).toPNG())
-      await window.webContents.executeJavaScript(`document.querySelector('.update-actions button').click()`)
-      await new Promise(resolve => setTimeout(resolve, 50))
-      if (!await window.webContents.executeJavaScript(`document.querySelector('.update-status').textContent.includes('最新版本')`)) throw new Error('Update settings did not respond')
-      await window.webContents.executeJavaScript(`document.querySelector('[aria-label="唤醒目标"]').value = 'existing'; document.querySelector('[aria-label="唤醒目标"]').dispatchEvent(new Event('change', {bubbles:true}));`)
-      await new Promise(resolve => setTimeout(resolve, 50))
-      if (!await window.webContents.executeJavaScript(`!!document.querySelector('[aria-label="唤醒对话"]')`)) throw new Error('Existing conversation selector did not open')
+      await pause()
+      for (const mode of ['watch', 'wake']) {
+        if (mode === 'wake') { await js(`document.querySelectorAll('.mode-tabs button')[1].click()`); await pause() }
+        const report = await js(`(() => { window.scrollTo(0,500); return { mode: ${JSON.stringify(mode)}, viewport: [innerWidth, innerHeight], scroll: [scrollX,scrollY], document: [document.documentElement.scrollWidth,document.documentElement.scrollHeight], panels: [...document.querySelectorAll('.screen .panel, .feature-hero, .quota-card')].map(n => {const r=n.getBoundingClientRect();return [r.right,r.bottom]}), clippedQuota: [...document.querySelectorAll('.quota-card')].some(n=>n.querySelector('.quota-footer').getBoundingClientRect().bottom>n.getBoundingClientRect().bottom-3), quota:[...document.querySelectorAll('.meter')].map(n=>Number(n.getAttribute('aria-valuenow'))) } })()`)
+        if (report.document[0] > width || report.document[1] > height || report.scroll.some(v => v) || report.clippedQuota || report.panels.some(([right, bottom]) => right > width || bottom > height) || JSON.stringify(report.quota) !== '[68,66]') throw Error(JSON.stringify(report))
+        console.log(JSON.stringify({ width, height, ...report }))
+        await writeFile(path.join(os.tmpdir(), `hrrrwork-v2-${mode}-${width}.png`), (await window.webContents.capturePage()).toPNG())
+      }
+      await js(`document.querySelectorAll('.timing-tabs button')[1].click()`); await pause()
+      const schedule = await js(`({ min:document.querySelector('[aria-label="首个唤醒时间"]').min, slots:document.querySelectorAll('.schedule-slots > span').length, disabled:document.querySelector('[aria-label="开启唤醒"]').disabled })`)
+      if (!schedule.min || schedule.slots !== 4 || !schedule.disabled) throw Error('Invalid daily schedule editor: '+JSON.stringify(schedule))
+      await js(`document.querySelector('.schedule-editor button').click()`); await pause()
+      await js(`document.querySelector('[aria-label="开启唤醒"]').click()`); await pause()
+      await js(`document.querySelectorAll('.mode-tabs button')[0].click()`); await pause()
+      await js(`document.querySelector('[aria-label="开启巡夜"]').click()`); await pause()
+      await js(`document.querySelectorAll('.mode-tabs button')[1].click()`); await pause()
+      if (!await js(`document.querySelector('[aria-label="开启唤醒"]').getAttribute('aria-checked')==='true'`)) throw Error('Night watch must not disable wake')
+      await js(`document.querySelector('[aria-label="设置"]').click()`); await pause()
+      const settings = await js(`(() => {const n=document.querySelector('.settings-drawer');const r=n.getBoundingClientRect();return {overflow:n.scrollWidth>n.clientWidth,top:r.top,bottom:r.bottom}})()`)
+      if (settings.overflow || settings.top < 0 || settings.bottom > height) throw Error(JSON.stringify(settings))
+      await js(`document.querySelector('.update-actions button').click()`); await pause()
+      if (!await js(`document.querySelector('.update-status').textContent.includes('最新版本')`)) throw Error('Update control failed')
       window.destroy()
     }
     app.quit()

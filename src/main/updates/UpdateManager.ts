@@ -32,7 +32,8 @@ export function newerVersion(next: string, current: string): boolean {
 export function selectAsset(release: Release, target: Target): ReleaseAsset | null {
   if (!versionParts(release.tag_name) || release.draft || release.prerelease) return null
   const version = release.tag_name.replace(/^v/, '')
-  const suffix = target.platform === 'darwin' && ['arm64', 'x64'].includes(target.arch) ? 'mac-universal.dmg'
+  const macSuffix = release.assets?.some(asset => asset.name === `Hrrrwork-${version}-mac-${target.arch}.dmg`) ? `mac-${target.arch}.dmg` : 'mac-universal.dmg'
+  const suffix = target.platform === 'darwin' && ['arm64', 'x64'].includes(target.arch) ? macSuffix
     : target.platform === 'win32' && target.arch === 'x64' ? 'win-x64.exe'
       : target.platform === 'linux' && target.arch === 'x64' ? target.appImage || !target.debian ? 'linux-x86_64.AppImage' : 'linux-amd64.deb' : null
   if (!suffix) return null
@@ -74,6 +75,7 @@ export class UpdateManager extends EventEmitter {
   }
 
   snapshot(): UpdateState { return { ...this.state } }
+  installationFailed(): void { this.publish({ status: 'error', message: '上次安装未完成，安装包已保留，可重新检查并安装。' }) }
   private publish(patch: Partial<UpdateState>): void {
     this.state = { ...this.state, ...patch }
     if (!this.stopped) this.emit('state', this.snapshot())

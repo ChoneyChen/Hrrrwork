@@ -1,9 +1,8 @@
 import type { ProviderId, QuotaWakeSettings, RateLimitResponse, WakeModel } from '../../shared/types'
 import type { PersistedState } from '../store'
 import { getPrimaryLimits } from './logic'
+import { dailyWakeSlots } from '../../shared/wakeSchedule'
 
-// Included-plan credit rates, verified against the official pricing table on 2026-10-19.
-// Unknown/new models are never assumed to be cheaper. No automatic premium fallback.
 const LIGHT_MODELS = ['gpt-6-luna', 'gpt-5.6-luna']
 export function chooseWakeModel(provider: ProviderId, requested: string, models: WakeModel[]): WakeModel | null {
   if (provider === 'claude-code') {
@@ -38,18 +37,29 @@ export class QuotaWake {
     if (!primary || primary.windowDurationMins !== 300 || !Number.isFinite(primary.resetsAt) || primary.resetsAt <= 0) return
     let plan = state.wakePlans[provider.id]
     const resetAt = primary.resetsAt
-    const grace = state.settings.graceSeconds * 1000
+    const daily = settings.timing === 'daily'
+    const scheduleKey = daily ? `daily:${settings.firstWakeAt}` : 'reset'
+    const grace = daily ? 0 : state.settings.graceSeconds * 1000
+    if (daily && (!settings.firstWakeAt || !Number.isFinite(settings.firstWakeAt))) return
+    if (plan && (plan.scheduleKey ?? 'reset') !== scheduleKey && !['dispatching', 'submitted'].includes(plan.status)) { delete state.wakePlans[provider.id]; plan = undefined }
     if (!plan || (plan.status !== 'waiting' && resetAt > plan.resetAt)) {
       const key = `${provider.id}:${resetAt}`
       if (state.wakeReceipts.includes(key)) return
-      plan = { resetAt, scheduledFor: resetAt * 1000 + grace, status: 'waiting', message: '等待官方五小时窗口刷新' }
+      const slotAt = daily ? dailyWakeSlots(settings.firstWakeAt!, Math.max(resetAt * 1000, now - 30 * 60 * 1000), 1)[0] : undefined
+      if (daily && !slotAt) return
+      plan = { resetAt, scheduledFor: slotAt ?? resetAt * 1000 + grace, status: 'waiting', scheduleKey, slotAt, message: daily ? '等待定时唤醒' : '等待官方五小时窗口刷新' }
       state.wakePlans[provider.id] = plan
     }
     if (plan.status !== 'waiting') return
     // If normal work already opened a newer window, don't inject an unnecessary ping.
     if (resetAt > plan.resetAt && primary.usedPercent > 0 && now >= plan.resetAt * 1000) {
-      plan.status = 'skipped'; plan.message = '新窗口已有用量，本次无需唤醒'
-      await save(); return
+      if (!daily) { plan.status = 'skipped'; plan.message = '新窗口已有用量，本次无需唤醒'; await save(); return }
+      plan.resetAt = resetAt
+      plan.scheduledFor = Math.max(plan.scheduledFor, resetAt * 1000)
+      plan.message = '新的额度窗口已开始，等待刷新后再唤醒'
+    } else if (daily && resetAt > plan.resetAt && now < plan.resetAt * 1000) {
+      plan.resetAt = resetAt
+      plan.scheduledFor = Math.max(plan.scheduledFor, resetAt * 1000)
     }
     const blockedUntil = [limits?.primary, limits?.secondary]
       .filter(window => window && window.usedPercent >= 99.9 && window.resetsAt * 1000 > now)

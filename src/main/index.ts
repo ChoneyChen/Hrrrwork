@@ -8,6 +8,8 @@ import { RelayEngine } from './relay/RelayEngine'
 import { JsonStore } from './store'
 import { ClaudeCode } from './providers/ClaudeCode'
 import { UpdateManager } from './updates/UpdateManager'
+import { InstallCoordinator } from './updates/InstallCoordinator'
+import os from 'node:os'
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 // Keep existing settings and queued relays when upgrading from the original name.
@@ -16,6 +18,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let engine: RelayEngine | null = null
 let updates: UpdateManager | null = null
+let installer: InstallCoordinator | null = null
 let isQuitting = false
 
 const gotLock = app.requestSingleInstanceLock()
@@ -24,6 +27,7 @@ if (!gotLock) app.quit()
 app.on('second-instance', () => showWindow())
 
 app.whenReady().then(async () => {
+  installer = new InstallCoordinator({ directory: path.join(app.getPath('userData'), 'updates'), resources: app.isPackaged ? process.resourcesPath : path.resolve('resources'), platform: process.platform, executable: process.execPath, home: os.homedir(), appImage: process.env.APPIMAGE })
   updates = new UpdateManager({
     version: app.getVersion(), directory: path.join(app.getPath('userData'), 'updates'),
     platform: process.platform, arch: process.arch, appImage: !!process.env.APPIMAGE,
@@ -53,6 +57,7 @@ app.whenReady().then(async () => {
   })
   await engine.start()
   updates.configure(engine.snapshot().settings.updates)
+  for (const delay of [1000, 5000, 15000]) setTimeout(() => { void installer?.cleanup(app.getVersion()).then(result => { if (result === 'failed') updates?.installationFailed() }).catch(() => {}) }, delay).unref()
 
   if (process.argv.includes('--hidden')) mainWindow?.hide()
 })
@@ -75,7 +80,7 @@ function createWindow(): void {
     minHeight: 680,
     show: false,
     title: 'Hrrrwork',
-    backgroundColor: '#f6f1e8',
+    backgroundColor: '#eef2f6',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: { x: 18, y: 17 },
     autoHideMenuBar: true,
@@ -135,6 +140,16 @@ function updateTray(snapshot: RelaySnapshot): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle('updates:install', async () => {
+    if (!app.isPackaged || !updates || !installer || updates.snapshot().status !== 'ready') throw new Error('尚无可安装的更新。')
+    const state = engine?.snapshot()
+    if (state?.queue.some(item => item.status === 'sending') || state?.threads.some(thread => thread.status?.type === 'active') || Object.values(state?.wakePlans ?? {}).some(plan => ['dispatching', 'submitted'].includes(plan.status))) throw new Error('正在执行任务，请本轮结束后再安装。')
+    const command = await installer.prepare(await updates.installerPath(), updates.snapshot().latestVersion!)
+    await installer.launch(command)
+    isQuitting = true
+    await engine?.stop()
+    app.quit()
+  })
   ipcMain.handle('updates:get', () => updates?.snapshot())
   ipcMain.handle('updates:check', () => updates?.check())
   ipcMain.handle('updates:download', () => updates?.download())

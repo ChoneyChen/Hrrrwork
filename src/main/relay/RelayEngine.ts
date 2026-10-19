@@ -154,7 +154,16 @@ export class RelayEngine extends EventEmitter {
           enabled: change.enabled === true,
           target: change.target === 'existing' ? 'existing' : 'new',
           threadId: typeof change.threadId === 'string' ? change.threadId.slice(0, 200) : '',
-          model: typeof change.model === 'string' ? change.model.trim().slice(0, 160) || 'auto' : 'auto'
+          model: typeof change.model === 'string' ? change.model.trim().slice(0, 160) || 'auto' : 'auto',
+          timing: change.timing === 'daily' ? 'daily' : 'reset',
+          firstWakeAt: Number.isFinite(change.firstWakeAt) ? change.firstWakeAt : 0
+        }
+        const next = safePatch.quotaWake[id]
+        const previous = this.state.settings.quotaWake[id]
+        if (next.timing === 'daily' && (previous.timing !== 'daily' || previous.firstWakeAt !== next.firstWakeAt)) {
+          const primary = getPrimaryLimits(this.snapshot().providers.find(provider => provider.id === id)?.quota ?? null)?.primary
+          if (!primary || primary.windowDurationMins !== 300 || !Number.isFinite(primary.resetsAt)) throw new Error('先连接应用并同步五小时刷新时间，再设置定时唤醒。')
+          if (!next.firstWakeAt || next.firstWakeAt < Math.max(Date.now(), primary.resetsAt * 1000)) throw new Error('首个唤醒时间不能早于当前时间或官方下一次刷新时间。')
         }
       }
     }
@@ -348,6 +357,9 @@ export class RelayEngine extends EventEmitter {
     this.quota = await this.client.call<RateLimitResponse>('account/rateLimits/read')
     if (!getPrimaryLimits(this.quota)?.primary) throw new Error('无法确认额度状态，未发送唤醒。')
     if (classifyLimit(this.quota).reached) throw new Error('额度尚未恢复可用。')
+    const primary = getPrimaryLimits(this.quota)!.primary!
+    const currentPlan = this.state.wakePlans.codex
+    if (settings.timing === 'daily' && currentPlan && primary.usedPercent > 0 && primary.resetsAt > currentPlan.resetAt) throw new Error('官方刷新时间已推迟，本次未提前唤醒。')
     let threadId: string
     if (settings.target === 'existing') {
       if (settings.threadId.startsWith('claude:')) throw new Error('请选择 Codex 对话。')

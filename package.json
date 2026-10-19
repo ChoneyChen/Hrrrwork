@@ -1,6 +1,6 @@
 {
   "name": "hrrrwork",
-  "version": "1.2.1",
+  "version": "2.0.0",
   "description": "Quiet desktop relay and optional quota wake for Codex and Claude Code.",
   "main": "out/main/index.js",
   "author": {
@@ -18,15 +18,10 @@
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test && npm run build",
     "package": "npm run build && electron-builder --publish never",
-    "package:mac": "npm run build && electron-builder --mac --universal --publish never",
+    "package:mac": "npm run build && electron-builder --mac dmg --arm64 --x64 --publish never && electron-builder --mac dmg --universal --publish never",
     "package:linux": "npm run build && electron-builder --linux --publish never",
     "package:win": "npm run build && electron-builder --win --publish never",
     "capture": "npm run build && electron scripts/capture-screenshot.mjs"
-  },
-  "dependencies": {
-    "lucide-react": "1.59.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
@@ -36,6 +31,9 @@
     "electron": "44.9.0",
     "electron-builder": "26.15.3",
     "electron-vite": "6.0.0",
+    "lucide-react": "1.59.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "5.0.5"
@@ -45,6 +43,9 @@
     "productName": "Hrrrwork",
     "artifactName": "Hrrrwork-${version}-${os}-${arch}.${ext}",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": ["zh-CN", "en-US"],
+    "npmRebuild": false,
     "directories": {
       "buildResources": "resources",
       "output": "release"
@@ -54,6 +55,8 @@
       "package.json"
     ],
     "extraResources": [
+      { "from": "resources/update-install.sh", "to": "update-install.sh" },
+      { "from": "resources/update-install.ps1", "to": "update-install.ps1" },
       {
         "from": "resources/claude-bridge.cjs",
         "to": "claude-bridge.cjs"
@@ -64,11 +67,11 @@
       }
     ],
     "mac": {
+      "identity": "-",
       "category": "public.app-category.productivity",
       "icon": "resources/icon.png",
       "target": [
-        "dmg",
-        "zip"
+        "dmg"
       ]
     },
     "linux": {
@@ -83,12 +86,13 @@
     "win": {
       "icon": "resources/icon.png",
       "target": [
-        "portable"
+        "nsis"
       ]
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
