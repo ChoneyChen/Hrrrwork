@@ -30,8 +30,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - name: Verify update selection, downloads and integrity on this platform
-        run: npx vitest run src/main/updates src/shared/wakeSchedule.test.ts src/renderer/src/QuotaCard.test.tsx
+      - name: Verify conversation access, reset scheduling and update integrity on this platform
+        run: npx vitest run src/main/updates src/main/relay src/main/store.test.ts src/main/codex/CodexAccess.test.ts src/main/codex/CodexProcess.test.ts src/shared/wakeSchedule.test.ts src/renderer/src/QuotaCard.test.tsx
       - run: npm run ${{ matrix.command }}
       - name: Check lean application payload
         run: node scripts/check-package.mjs
