@@ -18,6 +18,8 @@
 
 开关相互独立；关闭巡夜不会关闭唤醒。数字与进度条均表示**剩余额度**，未知时显示「—」。
 
+监测连接只读，不接管对话或读取正文。实际发送使用独立进程，结束或需要授权时释放会话；执行期间由该进程持有对话。刷新时直接复查并续跑，默认不额外等待；官方额度仍未释放时约每 5 秒复查。可在「续跑偏好」另选缓冲时间，发送前仍核对额度与原轮次，结果未知不自动重发。
+
 ## 自定首个唤醒时间
 
 ![唤醒界面](docs/wake.png)
@@ -53,19 +55,19 @@
 macOS Apple Silicon（Intel 将 `arm64` 改为 `x64`）：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.2/Hrrrwork-2.0.2-mac-arm64.dmg' -o Hrrrwork.dmg
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.3/Hrrrwork-2.0.3-mac-arm64.dmg' -o Hrrrwork.dmg
 ```
 
 Windows PowerShell：
 
 ```powershell
-Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.2/Hrrrwork-2.0.2-win-x64.exe' -OutFile Hrrrwork-Setup.exe
+Invoke-WebRequest -Uri 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.3/Hrrrwork-2.0.3-win-x64.exe' -OutFile Hrrrwork-Setup.exe
 ```
 
 Ubuntu / Debian：
 
 ```bash
-curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.2/Hrrrwork-2.0.2-linux-amd64.deb' -o Hrrrwork.deb
+curl -fL 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.3/Hrrrwork-2.0.3-linux-amd64.deb' -o Hrrrwork.deb
 sudo apt install ./Hrrrwork.deb
 ```
 

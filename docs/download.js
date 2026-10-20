@@ -1,13 +1,13 @@
-const base = 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.2/'
+const base = 'https://github.com/ChoneyChen/Hrrrwork/releases/download/v2.0.3/'
 const code = document.getElementById('download-command'), hint = document.getElementById('command-hint')
 const tabs = [...document.querySelectorAll('[data-os]')], architecture = document.getElementById('mac-architecture')
 let selected = /win/i.test(navigator.userAgent) ? 'win' : /linux/i.test(navigator.userAgent) ? 'linux' : 'mac'
 function select(os) {
   selected = os
   const command = {
-    mac: [`curl -fL '${base}Hrrrwork-2.0.2-mac-${architecture.value}.dmg' -o Hrrrwork.dmg`, '打开 DMG，将 Hrrrwork 拖入应用程序。'],
-    win: [`Invoke-WebRequest -Uri '${base}Hrrrwork-2.0.2-win-x64.exe' -OutFile Hrrrwork-Setup.exe`, '在 PowerShell 中下载，打开安装程序完成安装。'],
-    linux: [`curl -fL '${base}Hrrrwork-2.0.2-linux-amd64.deb' -o Hrrrwork.deb\nsudo apt install ./Hrrrwork.deb`, '适用于 Ubuntu / Debian；其他发行版可选择上方 AppImage。']
+    mac: [`curl -fL '${base}Hrrrwork-2.0.3-mac-${architecture.value}.dmg' -o Hrrrwork.dmg`, '打开 DMG，将 Hrrrwork 拖入应用程序。'],
+    win: [`Invoke-WebRequest -Uri '${base}Hrrrwork-2.0.3-win-x64.exe' -OutFile Hrrrwork-Setup.exe`, '在 PowerShell 中下载，打开安装程序完成安装。'],
+    linux: [`curl -fL '${base}Hrrrwork-2.0.3-linux-amd64.deb' -o Hrrrwork.deb\nsudo apt install ./Hrrrwork.deb`, '适用于 Ubuntu / Debian；其他发行版可选择上方 AppImage。']
   }[os]
   if (!command) return
   code.textContent = command[0]; hint.textContent = command[1]
