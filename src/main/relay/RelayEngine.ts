@@ -49,9 +49,14 @@ export class RelayEngine extends EventEmitter {
   private threads: ThreadSummary[] = []
   private lastCheckedAt: number | null = null
   private interval: NodeJS.Timeout | null = null
+  private dueTimer: NodeJS.Timeout | null = null
   private ticking = false
   private reconnectTimer: NodeJS.Timeout | null = null
   private sending = new Set<string>()
+  private workerEnvironment: NodeJS.ProcessEnv = {}
+  private workers = new Map<CodexAppServer, string>()
+
+  hasActiveWork(): boolean { return this.workers.size > 0 || this.sending.size > 0 || this.claude.hasActiveWork() }
 
   constructor(
     private readonly store: JsonStore,
@@ -80,8 +85,11 @@ export class RelayEngine extends EventEmitter {
   async stop(): Promise<void> {
     this.stopped = true
     if (this.interval) clearInterval(this.interval)
+    if (this.dueTimer) clearTimeout(this.dueTimer)
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     await this.client?.stop()
+    await Promise.all([...this.workers.keys()].map(worker => worker.stop()))
+    this.workers.clear()
     this.claude.stop()
   }
 
@@ -131,13 +139,14 @@ export class RelayEngine extends EventEmitter {
 
   async updateSettings(patch: Partial<RelaySettings>): Promise<RelaySnapshot> {
     const previousPath = this.state.settings.codexPath
+    const previousGrace = this.state.settings.graceSeconds
     const safePatch: Partial<RelaySettings> = { ...patch }
     if (patch.updates) safePatch.updates = {
       autoCheck: patch.updates.autoCheck === true,
       autoDownload: patch.updates.autoDownload === true
     }
     if (safePatch.graceSeconds !== undefined) {
-      safePatch.graceSeconds = Math.max(15, Math.min(600, Math.round(safePatch.graceSeconds)))
+      safePatch.graceSeconds = Number.isFinite(safePatch.graceSeconds) ? Math.max(0, Math.min(600, Math.round(safePatch.graceSeconds))) : 0
     }
     if (safePatch.pollIntervalSeconds !== undefined) {
       safePatch.pollIntervalSeconds = Math.max(20, Math.min(300, Math.round(safePatch.pollIntervalSeconds)))
@@ -168,6 +177,9 @@ export class RelayEngine extends EventEmitter {
       }
     }
     this.state.settings = { ...this.state.settings, ...safePatch }
+    if (patch.graceSeconds !== undefined) {
+      for (const item of this.state.queue) if (item.status === 'waiting') item.scheduledFor = Math.max(Date.now(), item.scheduledFor + (this.state.settings.graceSeconds - previousGrace) * 1000)
+    }
     await this.store.set(this.state)
     if (patch.startAtLogin !== undefined) await this.setLoginItem(patch.startAtLogin)
     if (patch.pollIntervalSeconds !== undefined) this.resetInterval()
@@ -175,6 +187,7 @@ export class RelayEngine extends EventEmitter {
     if (patch.claudePath !== undefined) await this.claude.refresh(patch.claudePath)
     if (patch.quotaWake) await this.tick(true)
     this.emitState()
+    this.scheduleDueCheck()
     return this.snapshot()
   }
 
@@ -212,10 +225,11 @@ export class RelayEngine extends EventEmitter {
       this.codexHome = installation.codeHome || process.env.CODEX_HOME || path.join(os.homedir(), '.codex')
       this.codexInstalled = Boolean(installation.executable)
       if (!installation.executable) throw new Error(installation.source)
-      const client = new CodexAppServer(installation.executable, {
+      this.workerEnvironment = {
         ...(installation.codeHome ? { CODEX_HOME: installation.codeHome } : {}),
         ...(installation.sqliteHome ? { CODEX_SQLITE_HOME: installation.sqliteHome } : {})
-      })
+      }
+      const client = new CodexAppServer(installation.executable, this.workerEnvironment, true)
       this.client = client
       client.on('disconnect', (error: Error) => {
         if (this.client !== client || this.stopped) return
@@ -278,6 +292,51 @@ export class RelayEngine extends EventEmitter {
     )
   }
 
+  private scheduleDueCheck(): void {
+    if (this.dueTimer) clearTimeout(this.dueTimer)
+    this.dueTimer = null
+    if (this.stopped) return
+    const times = this.state.settings.enabled ? this.state.queue.map(item => item.scheduledFor) : []
+    for (const id of ['codex', 'claude-code'] as ProviderId[]) {
+      const plan = this.state.wakePlans[id]
+      if (this.state.settings.quotaWake[id].enabled && plan?.status === 'waiting') times.push(plan.scheduledFor)
+    }
+    if (!times.length) return
+    const next = Math.min(...times.filter(Number.isFinite))
+    if (!Number.isFinite(next)) return
+    const delay = next - Date.now()
+    this.dueTimer = setTimeout(() => { this.dueTimer = null; void this.checkDue() }, Math.min(2_147_483_647, delay <= 0 ? 5000 : delay))
+  }
+
+  private async checkDue(): Promise<void> {
+    try {
+      if (this.state.settings.enabled && !this.stopped) await this.processDueQueue()
+      if (Object.entries(this.state.wakePlans).some(([id, plan]) => this.state.settings.quotaWake[id as ProviderId].enabled && plan.status === 'waiting' && plan.scheduledFor <= Date.now())) await this.tick()
+    } catch (error) {
+      this.addEvent('warning', `刷新复查未完成：${error instanceof Error ? error.message : String(error)}`)
+    } finally { this.scheduleDueCheck() }
+  }
+
+  private async createWorker(): Promise<CodexAppServer> {
+    const worker = new CodexAppServer(this.codexPath, this.workerEnvironment)
+    this.workers.set(worker, '')
+    worker.on('notification', (method: string, params: { threadId?: string; thread?: { id?: string }; turn?: { id?: string; status?: string } }) => {
+      if (method === 'thread/started' && params.thread?.id && this.workers.get(worker) === '') this.workers.set(worker, params.thread.id)
+      if (method === 'turn/completed' && params.threadId === this.workers.get(worker)) void this.releaseWorker(worker, params.turn?.status === 'completed', params.turn?.id)
+    })
+    worker.on('request', () => { void this.releaseWorker(worker, false); this.addEvent('warning', '接力需要授权或输入，已释放对话，请回到原应用处理。') })
+    worker.on('disconnect', () => { void this.releaseWorker(worker, false) })
+    try { await worker.start(); return worker } catch (error) { await this.releaseWorker(worker, false); throw error }
+  }
+
+  private async releaseWorker(worker: CodexAppServer, success = false, turnId?: string): Promise<void> {
+    const threadId = this.workers.get(worker)
+    this.workers.delete(worker)
+    await worker.stop()
+    if (threadId && this.wake.complete(this.state, 'codex', threadId, success, turnId)) this.addEvent(success ? 'success' : 'warning', this.state.wakePlans.codex!.message)
+    this.emitState()
+  }
+
   private async tick(force = false): Promise<void> {
     if (this.ticking) return
     if (!force && !this.state.settings.enabled && !Object.values(this.state.settings.quotaWake).some(setting => setting.enabled)) return
@@ -294,7 +353,7 @@ export class RelayEngine extends EventEmitter {
             })
           ])
           this.quota = quota.status === 'fulfilled' ? quota.value : null
-          if (threadResult.status === 'fulfilled') codexThreads = (threadResult.value.data ?? []).map(thread => ({ ...thread, provider: 'codex' }))
+          if (threadResult.status === 'fulfilled') codexThreads = (threadResult.value.data ?? []).map(({ id, name, cwd, createdAt, updatedAt, status, source }) => ({ id, name, cwd, createdAt, updatedAt, status, source, provider: 'codex' }))
           const failures = [quota.status === 'rejected' ? `额度读取失败：${String(quota.reason instanceof Error ? quota.reason.message : quota.reason).slice(0, 180)}` : '', threadResult.status === 'rejected' ? `任务读取失败：${String(threadResult.reason instanceof Error ? threadResult.reason.message : threadResult.reason).slice(0, 180)}` : ''].filter(Boolean)
           this.connectionMessage = failures.length ? `Codex 已连接 · ${failures.join('；')}` : 'Codex 已连接'
         } catch (error) {
@@ -305,6 +364,7 @@ export class RelayEngine extends EventEmitter {
       this.lastCheckedAt = Date.now()
       const relayProviders = new Set<ProviderId>()
       if (this.state.settings.enabled) {
+        await this.processDueQueue()
         await this.detectInterruptedTurns()
         for (const item of this.state.queue) relayProviders.add(item.provider ?? 'codex')
         await this.processDueQueue()
@@ -316,6 +376,7 @@ export class RelayEngine extends EventEmitter {
     } finally {
       this.ticking = false
       this.emitState()
+      this.scheduleDueCheck()
     }
   }
 
@@ -338,7 +399,7 @@ export class RelayEngine extends EventEmitter {
       const active = this.threads.some(thread => (thread.provider ?? 'codex') === provider.id && ['active', 'inProgress'].includes(thread.status?.type ?? ''))
       await this.wake.check({
         id: provider.id, connected: provider.connected, quota: provider.quota, models: provider.models ?? [],
-        busy: active || relayProviders.has(provider.id) || (provider.id === 'claude-code' && this.claude.hasActiveWork()),
+        busy: active || relayProviders.has(provider.id) || (provider.id === 'codex' && this.workers.size > 0) || (provider.id === 'claude-code' && this.claude.hasActiveWork()),
         send: (settings, model) => this.sendQuotaWake(provider.id, settings, model)
       }, this.state, () => this.store.set(this.state), (message, success) => this.addEvent(success ? 'info' : 'warning', message))
     }
@@ -360,29 +421,43 @@ export class RelayEngine extends EventEmitter {
     const primary = getPrimaryLimits(this.quota)!.primary!
     const currentPlan = this.state.wakePlans.codex
     if (settings.timing === 'daily' && currentPlan && primary.usedPercent > 0 && primary.resetsAt > currentPlan.resetAt) throw new Error('官方刷新时间已推迟，本次未提前唤醒。')
-    let threadId: string
     if (settings.target === 'existing') {
       if (settings.threadId.startsWith('claude:')) throw new Error('请选择 Codex 对话。')
       const latest = await this.latestTurn(settings.threadId)
       if (latest && latest.status !== 'completed') throw new Error('指定对话不是空闲状态，未发送唤醒。')
-      await this.client.call('thread/resume', { threadId: settings.threadId, excludeTurns: true })
-      threadId = settings.threadId
-    } else {
-      await fs.mkdir(this.wakeDirectory, { recursive: true })
-      const result = await this.client.call<{ thread: { id: string }; model?: string }>('thread/start', {
-        model: model.id, serviceTier: 'default', allowProviderModelFallback: false, cwd: this.wakeDirectory, sandbox: 'read-only', approvalPolicy: 'untrusted',
-        baseInstructions: '这是一轮简短的额度唤醒。只回复「收到」。不要调用工具、读取文件、执行命令或开展其他工作。'
-      })
-      if (result.model && result.model !== model.id) throw new Error('客户端切换了所选模型，未发送唤醒。')
-      threadId = result.thread.id
     }
-    const plan = this.state.wakePlans.codex
-    if (plan) { plan.threadId = threadId; await this.store.set(this.state) }
-    const result = await this.client.call<{ turn: { id: string } }>('turn/start', {
-      threadId, model: model.id, serviceTierForTurn: 'default', ...(lowestEffort(model) ? { effort: lowestEffort(model) } : {}),
-      input: [{ type: 'text', text: WAKE_PROMPT }]
-    })
-    return { threadId, turnId: result.turn.id }
+    const worker = await this.createWorker()
+    try {
+      let threadId: string
+      if (settings.target === 'existing') {
+        await this.assertIdleTarget(worker, settings.threadId)
+        await worker.call('thread/resume', { threadId: settings.threadId, excludeTurns: true })
+        threadId = settings.threadId
+        const latest = await this.latestTurn(threadId, worker)
+        if (latest && latest.status !== 'completed') throw new Error('指定对话已有新进展，未发送唤醒。')
+      } else {
+        await fs.mkdir(this.wakeDirectory, { recursive: true })
+        const result = await worker.call<{ thread: { id: string }; model?: string }>('thread/start', {
+          model: model.id, serviceTier: 'default', allowProviderModelFallback: false, cwd: this.wakeDirectory, sandbox: 'read-only', approvalPolicy: 'untrusted',
+          baseInstructions: '这是一轮简短的额度唤醒。只回复「收到」。不要调用工具、读取文件、执行命令或开展其他工作。'
+        })
+        if (result.model && result.model !== model.id) throw new Error('客户端切换了所选模型，未发送唤醒。')
+        threadId = result.thread.id
+      }
+      this.workers.set(worker, threadId)
+      const plan = this.state.wakePlans.codex
+      if (plan) { plan.threadId = threadId; await this.store.set(this.state) }
+      const result = await worker.call<{ turn: { id: string } }>('turn/start', {
+        threadId, model: model.id, serviceTierForTurn: 'default', ...(lowestEffort(model) ? { effort: lowestEffort(model) } : {}),
+        input: [{ type: 'text', text: WAKE_PROMPT }]
+      })
+      return { threadId, turnId: result.turn.id }
+    } catch (error) { await this.releaseWorker(worker, false); throw error }
+  }
+
+  private async assertIdleTarget(client: CodexAppServer, threadId: string): Promise<void> {
+    const { thread } = await client.call<{ thread: ThreadSummary }>('thread/read', { threadId, includeTurns: false })
+    if (!thread || !['idle', 'notLoaded'].includes(thread.status?.type ?? '')) throw new Error('对话正在工作或状态未知，未接管。')
   }
 
   private async detectInterruptedTurns(): Promise<void> {
@@ -394,7 +469,11 @@ export class RelayEngine extends EventEmitter {
     )
 
     const turns = await Promise.allSettled(
-      candidates.map(async (thread) => ({ thread, turn: await this.latestTurn(thread.id) }))
+      candidates.filter(thread => {
+        if ([...this.workers.values()].includes(thread.id)) return false
+        const session = thread.provider === 'claude-code' ? this.claude.sessions.get(thread.id.slice(7)) : null
+        return classifyLimit(session ? session.quota : this.quota).reached
+      }).map(async (thread) => ({ thread, turn: await this.latestTurn(thread.id) }))
     )
 
     for (const result of turns) {
@@ -431,12 +510,12 @@ export class RelayEngine extends EventEmitter {
   }
 
   private async processDueQueue(): Promise<void> {
-    const due = this.state.queue.filter((item) => item.scheduledFor <= Date.now())
+    const due = this.state.queue.filter((item) => item.status === 'waiting' && item.scheduledFor <= Date.now())
     for (const item of due) await this.resumeItem(item, false)
   }
 
   private async resumeItem(item: RelayQueueItem, manual: boolean): Promise<void> {
-    if (this.sending.has(item.id)) return
+    if (this.stopped || (!manual && !this.state.settings.enabled) || this.sending.has(item.id) || this.state.dispatched.includes(item.id)) return
     if (item.provider === 'claude-code') {
       await this.resumeClaude(item)
       return
@@ -445,16 +524,15 @@ export class RelayEngine extends EventEmitter {
     this.sending.add(item.id)
     item.status = 'sending'
     this.emitState()
-
+    let worker: CodexAppServer | undefined
     try {
-      if (!manual) {
+      {
         this.quota = await this.client.call<RateLimitResponse>('account/rateLimits/read')
+        if (!getPrimaryLimits(this.quota)?.primary) throw new Error('额度状态未知，本次未接管对话。')
         const limit = classifyLimit(this.quota)
         if (limit.reached) {
           item.status = 'waiting'
-          item.scheduledFor = (limit.resetAt ?? Math.floor(Date.now() / 1000 + 300)) * 1000
-            + this.state.settings.graceSeconds * 1000
-          this.addEvent('info', '额度仍未释放，已顺延下一次接力。', item.threadId)
+          item.scheduledFor = Math.max(Date.now() + 5000, (limit.resetAt ?? Date.now() / 1000 + 5) * 1000 + this.state.settings.graceSeconds * 1000)
           await this.store.set(this.state)
           return
         }
@@ -468,8 +546,16 @@ export class RelayEngine extends EventEmitter {
         return
       }
 
-      await this.client.call('thread/resume', { threadId: item.threadId })
-      await this.client.call('turn/start', {
+      if ([...this.workers.values()].includes(item.threadId)) throw new Error('此对话已有接力在运行。')
+      worker = await this.createWorker()
+      await this.assertIdleTarget(worker, item.threadId)
+      await worker.call('thread/resume', { threadId: item.threadId, excludeTurns: true })
+      this.workers.set(worker, item.threadId)
+      if (!sameUnfinishedTurn(item.turnId, await this.latestTurn(item.threadId, worker))) throw new Error('对话已发生变化，本次不发送。')
+      this.removeQueueItem(item.id)
+      this.state.dispatched = [...this.state.dispatched, item.id].slice(-200)
+      await this.store.set(this.state)
+      await worker.call('turn/start', {
         threadId: item.threadId,
         input: [{ type: 'text', text: this.state.settings.continuePrompt }]
       })
@@ -478,23 +564,25 @@ export class RelayEngine extends EventEmitter {
       this.notifyUser('Hrrrwork 已完成接力 ✨', `「${shortName(item.threadName)}」已继续工作。`)
       await this.store.set(this.state)
     } catch (error) {
-      item.status = 'waiting'
-      item.scheduledFor = Date.now() + 2 * 60 * 1000
-      this.addEvent('error', `接力失败，将重试：${error instanceof Error ? error.message : String(error)}`, item.threadId)
+      if (worker) await this.releaseWorker(worker, false)
+      const submitted = this.state.dispatched.includes(item.id)
+      if (!submitted) { item.status = 'waiting'; item.scheduledFor = Date.now() + 15000 }
+      this.addEvent('error', `${submitted ? '接力结果未知，不自动重发' : '暂未接管，稍后复查'}：${error instanceof Error ? error.message : String(error)}`, item.threadId)
       await this.store.set(this.state)
     } finally {
       this.sending.delete(item.id)
       this.emitState()
+      this.scheduleDueCheck()
     }
   }
 
-  private async latestTurn(threadId: string): Promise<ThreadTurn | null> {
+  private async latestTurn(threadId: string, client = this.client): Promise<ThreadTurn | null> {
     if (threadId.startsWith('claude:')) {
       const session = this.claude.sessions.get(threadId.slice(7))
       return session ? claudeTurn(session) : null
     }
-    if (!this.client) return null
-    const result = await this.client.call<TurnListResult>('thread/turns/list', {
+    if (!client) throw new Error('Codex 未连接，无法确认对话状态。')
+    const result = await client.call<TurnListResult>('thread/turns/list', {
       threadId,
       limit: 1,
       sortDirection: 'desc',

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { DEFAULT_QUOTA_WAKE, type ProviderId, type RelayEvent, type RelayQueueItem, type RelaySettings, type WakePlan } from '../shared/types'
 
 export interface PersistedState {
+  timingVersion?: number
   dispatched: string[]
   wakePlans: Partial<Record<ProviderId, WakePlan>>
   wakeReceipts: string[]
@@ -15,7 +16,7 @@ export const DEFAULT_SETTINGS: RelaySettings = {
   enabled: true,
   autoWatchRecent: true,
   continuePrompt: 'continue',
-  graceSeconds: 60,
+  graceSeconds: 0,
   pollIntervalSeconds: 45,
   startAtLogin: false,
   watchedThreadIds: [],
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: RelaySettings = {
 }
 
 const DEFAULT_STATE: PersistedState = {
+  timingVersion: 1,
   dispatched: [],
   wakePlans: {},
   wakeReceipts: [],
@@ -58,7 +60,9 @@ export class JsonStore {
     try {
       const raw = await fs.readFile(this.filePath, 'utf8')
       const parsed = JSON.parse(raw) as Partial<PersistedState>
+      const oldDefault = !parsed.timingVersion && parsed.settings?.graceSeconds === 60
       this.state = {
+        timingVersion: 1,
         dispatched: Array.isArray(parsed.dispatched) ? parsed.dispatched.slice(-200) : [],
         wakePlans: restoreWakePlans(parsed.wakePlans),
         wakeReceipts: Array.isArray(parsed.wakeReceipts) ? parsed.wakeReceipts.slice(-200) : [],
@@ -66,8 +70,12 @@ export class JsonStore {
           codex: { ...DEFAULT_QUOTA_WAKE.codex, ...parsed.settings?.quotaWake?.codex },
           'claude-code': { ...DEFAULT_QUOTA_WAKE['claude-code'], ...parsed.settings?.quotaWake?.['claude-code'] }
         } },
-        queue: Array.isArray(parsed.queue) ? parsed.queue : [],
+        queue: Array.isArray(parsed.queue) ? parsed.queue.filter(item => !parsed.dispatched?.includes(item.id)).map(item => ({ ...item, status: 'waiting', scheduledFor: item.scheduledFor - (oldDefault ? 60000 : 0) })) : [],
         events: Array.isArray(parsed.events) ? parsed.events.slice(0, 80) : []
+      }
+      if (oldDefault) {
+        this.state.settings.graceSeconds = 0
+        for (const plan of Object.values(this.state.wakePlans)) if (plan.status === 'waiting' && (plan.scheduleKey ?? 'reset') === 'reset') plan.scheduledFor -= 60000
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

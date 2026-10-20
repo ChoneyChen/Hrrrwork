@@ -6,6 +6,7 @@ const now = 1_800_000_000_000
 function fixture() {
   const state: PersistedState = { settings: structuredClone(DEFAULT_SETTINGS), queue: [], events: [], dispatched: [], wakePlans: {}, wakeReceipts: [] }
   state.settings.quotaWake.codex.enabled = true
+  state.settings.graceSeconds = 60
   const save = vi.fn(async () => {})
   const event = vi.fn()
   const send = vi.fn(async () => ({ threadId: 'wake-thread', turnId: 'wake-turn' }))

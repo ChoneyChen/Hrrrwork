@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RelayEngine } from './RelayEngine'
 import { ClaudeCode } from '../providers/ClaudeCode'
 import { DEFAULT_SETTINGS, type JsonStore } from '../store'
@@ -25,8 +25,14 @@ function fixture(resetOffset = 300, wakeDirectory?: string) {
   const engine = new RelayEngine(store, () => {}, () => {}, claude, wakeDirectory)
   engine['state'] = { settings: structuredClone(DEFAULT_SETTINGS), queue: [], events: [], dispatched: [], wakePlans: {}, wakeReceipts: [] }
   engine['threads'] = claude.threads()
+  vi.spyOn(engine as unknown as { createWorker: () => Promise<CodexAppServer> }, 'createWorker').mockImplementation(async () => ({
+    call: async (method: string, params: Record<string, unknown>) => method === 'thread/read' ? { thread: { id: params.threadId, status: { type: 'idle' } } } : engine['client']!.call(method, params),
+    stop: vi.fn(async () => {})
+  }) as unknown as CodexAppServer)
   return { engine, claude, session, resume, store }
 }
+
+afterEach(() => { vi.useRealTimers() })
 
 describe('multi-provider relay safety', () => {
   it('rejects a first wake before the official reset and accepts the reset itself', async () => {
@@ -93,6 +99,43 @@ describe('multi-provider relay safety', () => {
     await engine.sendNow(id)
     expect(resume).not.toHaveBeenCalled()
     expect(engine.snapshot().queue).toHaveLength(0)
+  })
+})
+
+describe('prompt reset scheduling and minimal reads', () => {
+  it('does not inspect any conversation turns while quota is available', async () => {
+    const { engine } = fixture()
+    const call = vi.fn()
+    engine['client'] = { call } as unknown as CodexAppServer
+    engine['threads'] = [{ id: 'normal-work', createdAt: 1, updatedAt: 2 }]
+    engine['quota'] = { rateLimits: { limitId: 'codex', primary: { usedPercent: 32, windowDurationMins: 300, resetsAt: Date.now() / 1000 + 1000 } } }
+    await engine['detectInterruptedTurns']()
+    expect(call).not.toHaveBeenCalled()
+  })
+
+  it('fires at the exact reset instead of waiting for the polling interval', async () => {
+    vi.useFakeTimers()
+    const { engine } = fixture()
+    engine['state'].queue = [{ id: 'q', threadId: 'thread', threadName: 'task', turnId: 't', detectedAt: Date.now(), scheduledFor: Date.now() + 2500, reason: 'five-hour', status: 'waiting' }]
+    const processDue = vi.spyOn(engine as unknown as { processDueQueue: () => Promise<void> }, 'processDueQueue').mockResolvedValue()
+    engine['scheduleDueCheck']()
+    await vi.advanceTimersByTimeAsync(2499)
+    expect(processDue).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(processDue).toHaveBeenCalledOnce()
+    await engine.stop()
+  })
+
+  it('backs off five seconds when the server still reports a spent, already-reset window', async () => {
+    const { engine } = fixture()
+    const item = { id: 'q', threadId: 'thread', threadName: 'task', turnId: 't', detectedAt: 0, scheduledFor: Date.now() - 1000, reason: 'five-hour' as const, status: 'waiting' as const }
+    engine['state'].queue = [item]
+    const call = vi.fn().mockResolvedValue({ rateLimits: { primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: Date.now() / 1000 - 30 } } })
+    engine['client'] = { call, stop: vi.fn() } as unknown as CodexAppServer
+    await engine['processDueQueue']()
+    expect(item.scheduledFor).toBeGreaterThanOrEqual(Date.now() + 4900)
+    expect(call.mock.calls.every(([method]) => method === 'account/rateLimits/read')).toBe(true)
+    await engine.stop()
   })
 })
 

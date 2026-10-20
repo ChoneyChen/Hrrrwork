@@ -13,11 +13,19 @@ export const demoSnapshot: RelaySnapshot = {
     { id: 'demo-3', name: '整理新版本发布说明', cwd: '/projects/hrrrwork', createdAt: 0, updatedAt: now / 1000 - 5200 }
   ],
   queue: [], events: [{ id: 'e1', at: now - 120000, kind: 'success', message: '已连接，开始巡夜。' }],
-  settings: { enabled: true, autoWatchRecent: true, continuePrompt: 'continue', graceSeconds: 60, pollIntervalSeconds: 45, startAtLogin: false, watchedThreadIds: ['demo-2'], codexPath: '', claudePath: '', updates: { autoCheck: true, autoDownload: true }, quotaWake: structuredClone(DEFAULT_QUOTA_WAKE) },
+  settings: { enabled: true, autoWatchRecent: true, continuePrompt: 'continue', graceSeconds: 0, pollIntervalSeconds: 45, startAtLogin: false, watchedThreadIds: ['demo-2'], codexPath: '', claudePath: '', updates: { autoCheck: true, autoDownload: true }, quotaWake: structuredClone(DEFAULT_QUOTA_WAKE) },
   wakePlans: {}, lastCheckedAt: now
 }
-export function previewSnapshot(daily = false): RelaySnapshot {
+export function previewSnapshot(daily = false, longTitles = false): RelaySnapshot {
   const snapshot = structuredClone(demoSnapshot)
+  if (longTitles) {
+    snapshot.threads[0].name = '很长的对话名称测试：跨平台桌面应用额度刷新后继续工作的边界条件与权限检查'.repeat(12)
+    snapshot.threads[1].name = 'UnbrokenConversationTitle'.repeat(30)
+    snapshot.queue = [{ id: 'long-title-queue', threadId: 'demo-1', threadName: snapshot.threads[0].name, turnId: 'demo-turn', detectedAt: now, scheduledFor: now + 4320000, reason: 'five-hour', status: 'waiting' }]
+    snapshot.events[0].message = 'UnbrokenStatusMessage'.repeat(50)
+    snapshot.settings.quotaWake.codex.target = 'existing'
+    snapshot.settings.quotaWake.codex.threadId = 'demo-1'
+  }
   if (daily) {
     const first = new Date(); first.setHours(6, 0, 0, 0)
     if (first.getTime() < now + 4320000) first.setDate(first.getDate() + 1)

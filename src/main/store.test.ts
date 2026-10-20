@@ -35,3 +35,20 @@ it('migrates v1.0 settings without enabling automatic wake and keeps wake receip
     expect(restored.wakePlans.codex?.message).toContain('不会重复')
   } finally { await fs.rm(directory, { recursive: true, force: true }) }
 })
+
+it('removes the old default minute delay once, but preserves an explicitly saved new-version buffer', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'hrrrwork-timing-'))
+  try {
+    const file = path.join(directory, 'state.json')
+    const store = new JsonStore(file)
+    const initial = await store.load()
+    await fs.writeFile(file, JSON.stringify({ ...initial, timingVersion: undefined, settings: { ...initial.settings, graceSeconds: 60 }, queue: [{ id: 'q', scheduledFor: 100000, status: 'waiting' }] }))
+    const migrated = await new JsonStore(file).load()
+    expect(migrated.settings.graceSeconds).toBe(0)
+    expect(migrated.queue[0].scheduledFor).toBe(40000)
+    migrated.settings.graceSeconds = 60
+    await store.set(migrated)
+    expect((await new JsonStore(file).load()).settings.graceSeconds).toBe(60)
+    expect((await new JsonStore(file).load()).queue[0].scheduledFor).toBe(40000)
+  } finally { await fs.rm(directory, { recursive: true, force: true }) }
+})

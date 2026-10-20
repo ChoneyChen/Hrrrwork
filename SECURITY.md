@@ -10,6 +10,10 @@ Hrrrwork stores settings, pending relay metadata, and short operational events i
 
 Connecting Claude Code adds local lifecycle hooks and a status-line wrapper to its settings, preserving the existing configuration and creating a backup before the first change. Disconnecting removes Hrrrwork's own hooks and restores the previous status line. Resumed sessions retain the client's permission rules; Hrrrwork does not bypass approval prompts.
 
+The persistent Codex observer uses an explicit read-only RPC allowlist. It never resumes, starts, archives, or modifies conversations and does not request message items or full histories. Turn inspection is limited to the latest turn when quota is exhausted or a selected target must be checked. Thread-list previews and extra response fields are not retained in the renderer snapshot.
+
+Actual dispatch uses a separate app-server process with no force-takeover option. The target must pass metadata and latest-turn checks, and resume responses exclude turns. The writer exits on completion, disconnection, dispatch error, or an interactive approval request, releasing its loaded conversations instead of relying on the server's delayed unsubscribe cleanup. While a dispatched turn is running, its process necessarily owns that conversation. An uncertain `turn/start` result is not retried automatically.
+
 ## Optional quota wake
 
 Quota wake is off by default, including on upgrades. Enabling it authorizes a short scheduled message to a new conversation or an explicitly selected idle conversation. A durable receipt is written before dispatch; uncertain results are not automatically replayed. Wake messages consume usage and do not guarantee a particular quota window or cost. No reset credits are redeemed.

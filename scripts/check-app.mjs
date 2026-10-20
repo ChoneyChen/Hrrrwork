@@ -8,17 +8,20 @@ app.on('window-all-closed', () => {})
 const pause = () => new Promise(resolve => setTimeout(resolve, 80))
 app.whenReady().then(async () => {
   try {
-    for (const [width, height] of [[1180, 800], [960, 640], [960, 680], [1600, 1000]]) {
+    for (const [width, height, longTitles] of [[1180, 800], [960, 640], [960, 680], [1600, 1000]].flatMap(([w,h]) => [[w,h,false], [w,h,true]])) {
       const window = new BrowserWindow({ width, height, useContentSize: true, show: false, webPreferences: { offscreen: true } })
       const js = code => window.webContents.executeJavaScript(code)
-      await window.loadFile(path.join(root, 'out/renderer/index.html'), { query: { capture: '1' } })
+      await window.loadFile(path.join(root, 'out/renderer/index.html'), { query: { capture: '1', ...(longTitles ? { longTitles: '1' } : {}) } })
       await pause()
       for (const mode of ['watch', 'wake']) {
         if (mode === 'wake') { await js(`document.querySelectorAll('.mode-tabs button')[1].click()`); await pause() }
         const report = await js(`(() => { window.scrollTo(0,500); return { mode: ${JSON.stringify(mode)}, viewport: [innerWidth, innerHeight], scroll: [scrollX,scrollY], document: [document.documentElement.scrollWidth,document.documentElement.scrollHeight], panels: [...document.querySelectorAll('.screen .panel, .feature-hero, .quota-card')].map(n => {const r=n.getBoundingClientRect();return [r.right,r.bottom]}), clippedQuota: [...document.querySelectorAll('.quota-card')].some(n=>n.querySelector('.quota-footer').getBoundingClientRect().bottom>n.getBoundingClientRect().bottom-3), quota:[...document.querySelectorAll('.meter')].map(n=>Number(n.getAttribute('aria-valuenow'))) } })()`)
         if (report.document[0] > width || report.document[1] > height || report.scroll.some(v => v) || report.clippedQuota || report.panels.some(([right, bottom]) => right > width || bottom > height) || JSON.stringify(report.quota) !== '[68,66]') throw Error(JSON.stringify(report))
-        console.log(JSON.stringify({ width, height, ...report }))
-        await writeFile(path.join(os.tmpdir(), `hrrrwork-v2-${mode}-${width}.png`), (await window.webContents.capturePage()).toPNG())
+        const overflow = await js(`[...document.querySelectorAll('.screen .panel')].some(n=>n.scrollWidth>n.clientWidth+1)`)
+        if (overflow) throw Error('A long conversation title stretched a panel')
+        if (mode === 'watch' && longTitles && !await js(`[...document.querySelectorAll('.task-copy strong, .queue-item strong')].every(n=>n.title && getComputedStyle(n).textOverflow==='ellipsis' && n.clientWidth<n.closest('.panel').clientWidth-40)`)) throw Error('Long titles must be truncated and have tooltips')
+        console.log(JSON.stringify({ width, height, longTitles, ...report }))
+        await writeFile(path.join(os.tmpdir(), `hrrrwork-v2-${mode}-${width}${longTitles ? '-long' : ''}.png`), (await window.webContents.capturePage()).toPNG())
       }
       await js(`document.querySelectorAll('.timing-tabs button')[1].click()`); await pause()
       const schedule = await js(`({ min:document.querySelector('[aria-label="首个唤醒时间"]').min, slots:document.querySelectorAll('.schedule-slots > span').length, disabled:document.querySelector('[aria-label="开启唤醒"]').disabled })`)

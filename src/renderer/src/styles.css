@@ -26,3 +26,13 @@ input, select { min-width: 0; color: #34435a; }
 @media (prefers-reduced-transparency: reduce) { .glass, .quota-card { backdrop-filter: none; background: #f8fafc; } }
 .task-copy strong { font-size: 12px; }.quota-heading > span { font-size: 12px; }.panel-head p { font-size: 11px; color: #8492a3; }.hero-copy p { color: #728399; }.field { color: #708298; }.quiet-notice, .field-hint { color: #8493a6; }
 .wake-config { padding: 21px 24px; }.timing-tabs { margin: 13px 0; }.schedule-slots { margin-top: 10px; }.schedule-slots > span { padding: 8px; }.wake-fields { margin-top: 14px; }.field-hint { margin: 7px 0; line-height: 1.7; }
+.overview, .watch-grid, .wake-grid { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); }
+.screen, .panel, .quota-stack, .quota-card, .task-list, .queue-list, .panel-head > div { min-width: 0; }
+.wake-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.preference-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.task-row, .queue-item { width: 100%; min-width: 0; }
+.task-row > button, .task-row > .tag, .queue-item > button, .queue-item > svg { flex-shrink: 0; }
+.task-copy > span, .queue-item strong, .queue-item span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.last-event { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.field select { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.next-wake p, .quiet-notice, .panel-head p { overflow-wrap: anywhere; }

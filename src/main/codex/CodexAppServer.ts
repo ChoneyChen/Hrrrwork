@@ -3,6 +3,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import readline from 'node:readline'
 import { cliLaunch } from '../providers/cliLaunch'
 
+const OBSERVER_METHODS = new Set(['initialize', 'account/rateLimits/read', 'model/list', 'thread/list', 'thread/read', 'thread/turns/list'])
+
 interface RpcResponse<T> {
   id?: number
   result?: T
@@ -23,7 +25,7 @@ export class CodexAppServer extends EventEmitter {
   private pending = new Map<number, PendingCall>()
   private stopping = false
 
-  constructor(private readonly executable: string, private readonly environment: NodeJS.ProcessEnv = {}) {
+  constructor(private readonly executable: string, private readonly environment: NodeJS.ProcessEnv = {}, private readonly readOnly = false) {
     super()
   }
 
@@ -47,7 +49,7 @@ export class CodexAppServer extends EventEmitter {
 
     try {
       await this.call('initialize', {
-        clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '2.0.2' },
+        clientInfo: { name: 'hrrrwork', title: 'Hrrrwork', version: '2.0.3' },
         capabilities: { experimentalApi: true }
       })
       this.notify('initialized', {})
@@ -59,12 +61,18 @@ export class CodexAppServer extends EventEmitter {
 
   async stop(): Promise<void> {
     this.stopping = true
-    this.child?.kill()
+    const child = this.child
     this.child = null
     this.rejectPending(new Error('Codex App Server stopped'))
+    if (child && child.exitCode === null && child.signalCode === null) await new Promise<void>(resolve => {
+      const timer = setTimeout(() => { child.kill('SIGKILL'); resolve() }, 2000)
+      child.once('exit', () => { clearTimeout(timer); resolve() })
+      child.kill()
+    })
   }
 
   async call<T>(method: string, params: Record<string, unknown> = {}, timeoutMs = 20_000): Promise<T> {
+    if (this.readOnly && (!OBSERVER_METHODS.has(method) || (method === 'thread/read' && params.includeTurns === true) || (method === 'thread/turns/list' && (params.limit !== 1 || params.itemsView !== 'notLoaded')))) throw new Error(`Read-only Codex observer rejected ${method}`)
     if (!this.child?.stdin.writable) throw new Error('Codex App Server is not connected')
     const id = this.nextId++
     const promise = new Promise<T>((resolve, reject) => {
@@ -79,6 +87,7 @@ export class CodexAppServer extends EventEmitter {
   }
 
   notify(method: string, params: Record<string, unknown>): void {
+    if (this.readOnly && method !== 'initialized') throw new Error(`Read-only Codex observer rejected ${method}`)
     this.write({ method, params })
   }
 
@@ -94,6 +103,10 @@ export class CodexAppServer extends EventEmitter {
       return
     }
 
+    if (message.method && message.id !== undefined) {
+      this.emit('request', message.method)
+      return
+    }
     if (typeof message.id === 'number') {
       const pending = this.pending.get(message.id)
       if (!pending) return
